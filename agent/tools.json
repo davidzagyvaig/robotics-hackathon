@@ -1,0 +1,16 @@
+{
+  "_comment": "The single CLIENT tool BrailleBuddy uses. Recreate this in the ElevenLabs dashboard (Agent → Tools → Add tool → type: Client). The name MUST be exactly render_braille — it is matched case-sensitively to the function registered in apps/web/components/Conversation.tsx.",
+  "type": "client",
+  "name": "render_braille",
+  "description": "Physically display text on the BrailleBuddy device, one Braille cell at a time, so the learner can feel each character. Call this whenever you want the learner to feel a letter, number, word, or short phrase. Pacing is controlled by the learner's speed knob, not by you.",
+  "expects_response": true,
+  "response_timeout_secs": 30,
+  "parameters": [
+    {
+      "identifier": "text",
+      "type": "string",
+      "required": true,
+      "description": "The exact text to render in Braille — e.g. \"a\", \"cat\", or \"hello world\". Use plain letters, digits, spaces and simple punctuation."
+    }
+  ]
+}

@@ -1,52 +1,50 @@
 # Team guide — who owns what
 
-Four people, one contract (`shared/protocol.py` + `events.jsonl`). Work in parallel.
+Four people, one contract (`firmware/PROTOCOL.md`). Build the web half and the firmware half in
+parallel against it.
 
 ## The contract that lets us work in parallel
-- **Actuator**: firmware accepts `P<pan> T<tilt>\n` over USB serial and exposes a UVC macro camera. Nothing else crosses the hardware/software boundary. (`firmware/PROTOCOL.md`)
-- **Data bus**: every service appends to `out/events.jsonl`. The dashboard tails it. (`shared/events.py`)
-- **Lesion record**: everything lands in `out/lesions.db`. (`shared/lesions.py`)
+- **Device boundary:** the firmware accepts `B<6 bits>` over USB serial and streams `POT <value>`.
+  Nothing else crosses the hardware/software line. (`firmware/PROTOCOL.md`)
+- **Browser owns the logic:** char→braille mapping, timing, and the ElevenLabs tool all live in
+  `apps/web`. The agent just passes text to `render_braille`.
 
 ## Roles
 
-### Mete — vision / ML / AI / dashboard (all software)
-Owns: `capture/`, `triage/`, `voice/`, `backend/`, `dashboard/`, `tools/`.
-- Live OAK pipeline (`capture/`), lesion detection + 3D triangulation (`capture/vision.py`).
-- Triage: ABCD/TDS + HAM10000 classifier + VLM explanation (`triage/`).
-- ElevenLabs voice (`voice/`), the clinician console (`dashboard/`), the API (`backend/`).
-- Can build the entire stack in **sim mode** with zero hardware — see Quick start.
+### Mete — web / agent (all software)
+Owns: `apps/web/`, `agent/`.
+- The Next.js app, WebSerial connection (`lib/serial.ts`), braille dict (`lib/braille.ts`).
+- The ElevenLabs agent + `render_braille` client tool + signed-URL route.
+- Can build everything against the **Wokwi** simulator before hardware exists.
 
 ### Samer — mechanical / electronics / 3D print
-Owns: the physical pan-tilt rig + macro-camera mount + power.
-- Assemble pan-tilt (MG996R pan + MG90S tilt) on the PCA9685.
-- Dedicated 5.5–6 V servo rail, common ground, 1000 µF cap. **This is the #1 risk — get it solid first.**
-- Print the standoff cone + bracket. Mount the OAK-D-SR and the macro borescope.
+Owns: the physical braille cell + power.
+- Design/print the 6-dot mechanism that turns servo motion into crisp raised dots.
+- **Dedicated 5–6 V servo rail, common ground, 1000 µF cap. This is the #1 risk — get it solid first.**
+- Mount the 6 MG90S + the potentiometer knob.
 
-### Dave — firmware / hardware↔software bridge / CAD
-Owns: `firmware/` + making the real arm obey Mete's commands.
-- Flash `firmware/dermascout_esp32` to the ESP32. Verify `BOOT` + `ST` over serial.
-- Confirm `python -m control.control_service` (with `DERMA_USE_ARM=true`) drives it.
-- Buy a USB borescope Thursday AM (UVC, ~25–40 mm working distance). Confirm `cv2.VideoCapture` opens it.
+### Dave — firmware / hardware↔software bridge
+Owns: `firmware/`.
+- Flash `firmware/braillebuddy_esp32` to the ESP32-S3. Verify `BOOT` + `BRAILLEBUDDY v1` over serial.
+- Confirm `B<bits>` moves the right dots and the pot streams. Calibrate `DOWN_US`/`UP_US` per dot.
+- Own the monorepo + Vercel deploy.
 
-### Zsombor — MD / clinical / demo
-Owns: clinical correctness + the LOI campaign + demo script.
-- Sanity-check ABCD/TDS thresholds and the "documentation, not diagnosis" framing everywhere.
-- Tune the voice copy in `voice/prompts.py` (clothing greeting, consent, bump recovery).
-- Email dermatologists for letters of intent. Run the patient role-play in the demo.
+### Zsombor — content / demo / UX
+Owns: the teaching script + demo.
+- Tune the agent prompt in `agent/prompt.md` (greeting, how letters are explained, encouragement).
+- Sanity-check the braille mappings in `docs/BRAILLE.md`.
+- Run the learner role-play in the demo; write the judge-facing script.
 
 ## Build order (ship-blockers first)
-1. **serial servo loop** (COBS/watchdog) — Dave + Samer
-2. **find → center → capture** on the OAK — Mete  ← *the only thing that must be bulletproof*
-3. triage + voice + dashboard — Mete
-4. clothing/private-mode + change detection — Mete + Zsombor
-5. SLAM sweep — *bonus only, not on the judged path*
+1. **serial loop** — `B<bits>` drives servos, `POT` streams (Dave + Samer) ← must be bulletproof
+2. **web connect + render_braille** against Wokwi/real board (Mete)
+3. **ElevenLabs agent + signed URL** wired into the conversation (Mete + Zsombor)
+4. **physical cell + calibration** (Samer + Dave)
+5. **Vercel deploy + demo polish** (Dave + Mete)
 
-## Failsafe tiers (degrade gracefully, never "fail")
-| Tier | Running | If it breaks, say |
+## Failsafe ladder (degrade gracefully)
+| If this breaks… | Fall back to | Say |
 |---|---|---|
-| 3 full auto | everything | "production runs this end-to-end" |
-| **2 semi-auto** ← demo target | auto-find, operator approves each move (`--approve-each`) | — |
-| 1 RC | voice + manual macro positioning | "same voice + mesh, I'm driving the head by hand" |
-| 0 voice-only | voice + 3D mesh + click lesions on screen | "this is the version we'd ship first anyway" |
-
-Flip tiers with env flags in `.env` (`DERMA_USE_ARM`, `DERMA_USE_MACRO`, …).
+| voice agent | manual: type text in a dev box → `render_braille` | "same device, I'm driving it by text" |
+| WebSerial / device | the on-screen cell mirror in the UI | "here's the cell on screen; the hardware mirrors it" |
+| a flaky servo | teach letters that avoid that dot | — |

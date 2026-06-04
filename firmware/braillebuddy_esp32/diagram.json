@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "author": "BrailleBuddy",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-s3-devkitc-1", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-servo", "id": "d1", "top": -260, "left": 260, "attrs": { "hornColor": "#38e1b0" } },
+    { "type": "wokwi-servo", "id": "d2", "top": -160, "left": 260, "attrs": {} },
+    { "type": "wokwi-servo", "id": "d3", "top": -60, "left": 260, "attrs": {} },
+    { "type": "wokwi-servo", "id": "d4", "top": 40, "left": 260, "attrs": {} },
+    { "type": "wokwi-servo", "id": "d5", "top": 140, "left": 260, "attrs": {} },
+    { "type": "wokwi-servo", "id": "d6", "top": 240, "left": 260, "attrs": {} },
+    { "type": "wokwi-potentiometer", "id": "pot", "top": 220, "left": -180, "attrs": { "value": "2048" } }
+  ],
+  "connections": [
+    [ "esp:4", "d1:PWM", "green", [] ],
+    [ "esp:5", "d2:PWM", "green", [] ],
+    [ "esp:6", "d3:PWM", "green", [] ],
+    [ "esp:7", "d4:PWM", "green", [] ],
+    [ "esp:15", "d5:PWM", "green", [] ],
+    [ "esp:16", "d6:PWM", "green", [] ],
+
+    [ "esp:5V", "d1:V+", "red", [] ],
+    [ "esp:5V", "d2:V+", "red", [] ],
+    [ "esp:5V", "d3:V+", "red", [] ],
+    [ "esp:5V", "d4:V+", "red", [] ],
+    [ "esp:5V", "d5:V+", "red", [] ],
+    [ "esp:5V", "d6:V+", "red", [] ],
+
+    [ "esp:GND.1", "d1:GND", "black", [] ],
+    [ "esp:GND.1", "d2:GND", "black", [] ],
+    [ "esp:GND.1", "d3:GND", "black", [] ],
+    [ "esp:GND.1", "d4:GND", "black", [] ],
+    [ "esp:GND.1", "d5:GND", "black", [] ],
+    [ "esp:GND.1", "d6:GND", "black", [] ],
+
+    [ "pot:VCC", "esp:3V3", "red", [] ],
+    [ "pot:GND", "esp:GND.2", "black", [] ],
+    [ "pot:SIG", "esp:1", "purple", [] ]
+  ]
+}
