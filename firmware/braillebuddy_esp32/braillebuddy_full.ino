@@ -14,15 +14,19 @@
  *
  *  WHAT IT DOES
  *    - Drives 6 servos, one per braille dot, between a calibratable OFF angle
- *      (dot down/flush) and ON angle (dot raised). On/off only, but the SWEEP
- *      SPEED between them is adjustable live, by a potentiometer AND by the app.
+ *      (dot down/flush) and ON angle (dot raised). On/off only; the SWEEP SPEED
+ *      between them is set ONLY by the potentiometer. From that speed the box
+ *      computes how long one cell takes to fully change and streams that back
+ *      (CHARMS) so the app knows how fast it may send characters.
  *    - Pulses a haptic motor every time a NEW braille cell (letter) is shown.
  *    - Reads a capacitive touch button: single tap and double tap are reported
  *      to the host (TOUCH 1 / TOUCH 2) so the app can read notifications aloud
  *      or step through them one-by-one in braille.
- *    - Reads a 2-prong physical toggle switch and reports its state (SW 0/1).
- *    - Talks the SAME line protocol over BOTH USB serial AND Bluetooth LE, so
- *      a laptop (USB or BLE) and a phone (BLE) can both drive it.
+ *    - The 2-prong physical switch SELECTS WHICH BLE DEVICE is live: the box
+ *      advertises under two names ("BrailleBuddy-Laptop" / "BrailleBuddy-Phone");
+ *      flipping the switch drops the current link and re-advertises to the other,
+ *      so the laptop app and the phone app each connect only when selected.
+ *    - Talks the SAME line protocol over USB serial AND Bluetooth LE.
  *
  *  Dot / bit order = braille dots 1..6:   1 4 / 2 5 / 3 6
  *  (bit i of the 6-bit frame = dot i+1). e.g. B100000 = dot 1 = "a".
@@ -34,7 +38,6 @@
  *    Z                 lower every dot (no haptic)
  *    E                 enable / re-attach the servos
  *    D                 relax (detach) servos so they stop buzzing/heating
- *    S<0-100>          set switching SPEED in percent (the app's speed slider)
  *    H                 fire one haptic pulse now (test)
  *    CON <dot> <ang>   calibrate ON angle  of a dot (dot 1-6, ang 0-180)
  *    COFF <dot> <ang>  calibrate OFF angle of a dot (dot 1-6, ang 0-180)
@@ -44,9 +47,13 @@
  *    BRAILLEBUDDY v2               identity (reply to ID?)
  *    OK / ERR PARSE                ack / unknown command
  *    POT <0-4095>      ~10 Hz      raw speed-knob reading (kept for compat)
- *    SPEED <0-100>     ~10 Hz      effective switching speed percent
+ *    SPEED <0-100>     ~10 Hz      pot-set switching speed percent
+ *    CHARMS <ms>       ~10 Hz      ms for ONE cell to fully change at the current
+ *                                  speed = the minimum delay the app should wait
+ *                                  between characters (rate = 1000 / CHARMS cps)
  *    TOUCH 1 / TOUCH 2             single / double tap on the touch button
  *    SW 0 / SW 1                   physical toggle switch changed state
+ *    TARGET <0|1> <name>          active BLE device changed (0=laptop, 1=phone)
  *
  *  ---- WIRING (the #1 risk is servo power — get it right first) ----
  *    - 6 servos on a DEDICATED 5-6V rail, NOT the ESP 5V/3V3 pin. Common GND
@@ -86,11 +93,11 @@ int ON_ANGLE[6]  = {40, 40, 40, 40, 40, 40};
 // ---- Switching-speed calibration ----
 //  speedPct (0..100) is mapped to "degrees moved per servo update". Small step =
 //  slow, smooth sweep; big step = near-instant snap. Tune these to taste — they
-//  define what 0% and 100% physically mean. Live speed comes from pot/app within.
+//  define what 0% and 100% physically mean. The live speed comes ONLY from the pot.
 const int   SERVO_UPDATE_MS = 15;  // how often we nudge the servos (~servo frame)
 const float MIN_STEP_DEG    = 1.0; // degrees/update at speed = 0%   (slowest)
 const float MAX_STEP_DEG    = 90.0;// degrees/update at speed = 100% (snap)
-int speedPct = 60;                 // boot default; pot or app overrides it
+int speedPct = 60;                 // boot default; the pot sets it every cycle
 
 // ---- Haptic ----
 const bool HAPTIC_ACTIVE_HIGH = true; // flip if your driver turns on with LOW
@@ -104,12 +111,16 @@ const unsigned long DOUBLE_TAP_MS     = 350; // 2nd tap within this = double tap
 // ---- Physical switch ----
 const unsigned long SWITCH_DEBOUNCE_MS = 40;
 
-// ---- Pot ----
-const int POT_DEADBAND = 80; // pot must move this much (of 4095) to retake control
-
 // ---- Bluetooth LE (Nordic UART Service). Set to 0 to build USB-serial only. ----
 #define USE_BLE 1
-const char* BLE_NAME = "BrailleBuddy";
+//  The physical 2-prong switch picks WHICH connection is live. The ESP advertises
+//  under TWO different names — one the laptop app looks for, one the phone app looks
+//  for — and only ever exposes one at a time. Flip the switch and the box drops the
+//  current link and re-advertises to the OTHER device. Each app filters on its own
+//  name (below), so it only connects when the switch is pointed at it.
+//    switch position 0 (open, reads HIGH)  -> target 0
+//    switch position 1 (closed to GND, LOW)-> target 1
+const char* BLE_NAME[2] = {"BrailleBuddy-Laptop", "BrailleBuddy-Phone"};
 
 // ===========================================================================
 //  Transport: send a line to USB serial AND (if connected) BLE.
@@ -123,9 +134,12 @@ const char* BLE_NAME = "BrailleBuddy";
   #define NUS_SERVICE   "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
   #define NUS_RX_CHAR   "6E400002-B5A3-F393-E0A9-E50E24DCCA9E" // host -> device (write)
   #define NUS_TX_CHAR   "6E400003-B5A3-F393-E0A9-E50E24DCCA9E" // device -> host (notify)
+  static BLEServer*         bleServer = nullptr;
   static BLECharacteristic* txChar = nullptr;
   static volatile bool bleConnected = false;
+  static volatile uint16_t bleConnId = 0;
   static String bleRxBuf;
+  static int bleTarget = 0;            // 0 = laptop name, 1 = phone name
 #endif
 
 void handleLine(String line); // fwd decl
@@ -142,11 +156,30 @@ void sendLine(const String& s) {
 }
 
 #if USE_BLE
+// (Re)build the advertising packet for whichever target the switch currently selects,
+// so only the matching app (laptop OR phone) sees and connects to the box.
+void applyAdvertising() {
+  BLEAdvertising* adv = BLEDevice::getAdvertising();
+  adv->stop();
+  esp_ble_gap_set_device_name(BLE_NAME[bleTarget]);
+  BLEAdvertisementData ad;
+  ad.setName(BLE_NAME[bleTarget]);
+  ad.setCompleteServices(BLEUUID(NUS_SERVICE));
+  adv->setAdvertisementData(ad);
+  BLEAdvertisementData sr;                 // scan-response also carries the name
+  sr.setName(BLE_NAME[bleTarget]);
+  adv->setScanResponseData(sr);
+  adv->start();
+}
+
 class ServerCB : public BLEServerCallbacks {
-  void onConnect(BLEServer* s) override { bleConnected = true; }
+  void onConnect(BLEServer* s, esp_ble_gatts_cb_param_t* param) override {
+    bleConnected = true;
+    bleConnId = param->connect.conn_id;
+  }
   void onDisconnect(BLEServer* s) override {
     bleConnected = false;
-    BLEDevice::startAdvertising(); // allow the next phone/laptop to connect
+    applyAdvertising();      // re-advertise to whichever device is now selected
   }
 };
 class RxCB : public BLECharacteristicCallbacks {
@@ -158,21 +191,28 @@ class RxCB : public BLECharacteristicCallbacks {
     }
   }
 };
+
+// Point the box at the other device: drop the current link, re-advertise the new name.
+void switchTarget(int t) {
+  if (t == bleTarget) return;
+  bleTarget = t;
+  sendLine(String("TARGET ") + bleTarget + " " + BLE_NAME[bleTarget]);
+  if (bleConnected) bleServer->disconnect(bleConnId); // onDisconnect re-advertises
+  else              applyAdvertising();
+}
+
 void startBLE() {
-  BLEDevice::init(BLE_NAME);
-  BLEServer* server = BLEDevice::createServer();
-  server->setCallbacks(new ServerCB());
-  BLEService* svc = server->createService(NUS_SERVICE);
+  BLEDevice::init(BLE_NAME[bleTarget]);
+  bleServer = BLEDevice::createServer();
+  bleServer->setCallbacks(new ServerCB());
+  BLEService* svc = bleServer->createService(NUS_SERVICE);
   txChar = svc->createCharacteristic(NUS_TX_CHAR, BLECharacteristic::PROPERTY_NOTIFY);
   txChar->addDescriptor(new BLE2902());
   BLECharacteristic* rx = svc->createCharacteristic(NUS_RX_CHAR,
       BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
   rx->setCallbacks(new RxCB());
   svc->start();
-  BLEAdvertising* adv = BLEDevice::getAdvertising();
-  adv->addServiceUUID(NUS_SERVICE);
-  adv->setScanResponse(true);
-  BLEDevice::startAdvertising();
+  applyAdvertising();
 }
 #endif
 
@@ -278,13 +318,34 @@ void updateSwitch() {
   if (now - swEdgeAt >= SWITCH_DEBOUNCE_MS && raw != swStable) {
     swStable = raw;
     sendLine(String("SW ") + swStable);
+#if USE_BLE
+    switchTarget(swStable);   // flip = hand the box to the other device
+#endif
   }
 }
 
 // ===========================================================================
-//  Potentiometer -> speed (with deadband so the app's S<pct> isn't fought)
+//  Potentiometer -> speed, and the resulting per-cell timing for the app.
 // ===========================================================================
-int lastPotRaw = -1000;
+
+// How long ONE cell takes to fully change at the current speed. The slowest dot
+// is the one with the biggest OFF<->ON span; updateServos() moves it in
+// ceil(span/step) updates, each SERVO_UPDATE_MS long. So this number is exactly
+// the settle time the app must wait before sending the next character. It tracks
+// both the pot (via step) and your angle calibration (via span) automatically.
+int cellChangeMs() {
+  int maxSpan = 1;
+  for (int i = 0; i < 6; i++) {
+    int span = abs(ON_ANGLE[i] - OFF_ANGLE[i]);
+    if (span > maxSpan) maxSpan = span;
+  }
+  float step = MIN_STEP_DEG + (MAX_STEP_DEG - MIN_STEP_DEG) *
+               (constrain(speedPct, 0, 100) / 100.0f);
+  if (step < 0.01f) step = 0.01f;
+  int updates = (int)ceilf(maxSpan / step);
+  if (updates < 1) updates = 1;
+  return updates * SERVO_UPDATE_MS;
+}
 
 void updatePotAndSpeed() {
   static unsigned long lastMs = 0;
@@ -292,14 +353,10 @@ void updatePotAndSpeed() {
   if (now - lastMs < 100) return; // ~10 Hz
   lastMs = now;
   int raw = analogRead(POT_PIN);
-  // The knob only "takes over" the speed when physically moved past the deadband,
-  // so an app-set speed sticks until the user actually turns the pot.
-  if (abs(raw - lastPotRaw) > POT_DEADBAND) {
-    lastPotRaw = raw;
-    speedPct = (int)((raw / 4095.0f) * 100.0f);
-  }
-  sendLine(String("POT ") + raw);     // kept for backward compatibility
-  sendLine(String("SPEED ") + speedPct);
+  speedPct = (int)((raw / 4095.0f) * 100.0f); // the pot is the ONLY speed control
+  sendLine(String("POT ") + raw);             // raw knob value (kept for compat)
+  sendLine(String("SPEED ") + speedPct);      // switching speed percent
+  sendLine(String("CHARMS ") + cellChangeMs()); // ms per cell -> app paces sending
 }
 
 // ===========================================================================
@@ -343,12 +400,6 @@ void handleLine(String line) {
   } else if (c == 'D') {
     enabled = false;
     for (int i = 0; i < 6; i++) servos[i].detach();
-    sendLine("OK");
-
-  } else if (c == 'S') {                             // S<0-100> speed from the app
-    int pct = line.substring(1).toInt();
-    speedPct = constrain(pct, 0, 100);
-    lastPotRaw = -1000; // let the pot retake control on its next real move
     sendLine("OK");
 
   } else if (c == 'H') {                             // manual haptic test
@@ -400,7 +451,11 @@ void setup() {
   attachAll();
   analogReadResolution(12);
 
+  // Read the switch once at boot so we advertise to the correct device from the start.
+  swStable = (digitalRead(SWITCH_PIN) == LOW) ? 1 : 0;
+  swRaw = swStable;
 #if USE_BLE
+  bleTarget = swStable;
   startBLE();
 #endif
 
