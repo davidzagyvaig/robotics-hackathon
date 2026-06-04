@@ -15,11 +15,16 @@ so anyone on the team can reproduce it. The agent runs in the browser via `@elev
    - **Description:** (from `tools.json`)
    - **Parameter:** `text` — type `string`, required
    - Enable **"Wait for response"** so the agent hears the confirmation string back.
-5. **Auth.** Keep the agent private and use signed URLs (the default flow here). The web app's
-   `/api/get-signed-url` route mints them server-side with your API key.
+5. **Auth.** Keep the agent **private**: enable "Require authentication" in the agent's
+   Security settings, and (defense in depth) add your Vercel domain + `localhost` to the
+   **hostname allowlist**. The web app's `/api/get-signed-url` route mints signed URLs
+   server-side with your API key.
 6. **Copy two values into `apps/web/.env.local`** (copy from the repo-root `.env.example`):
-   - `ELEVENLABS_API_KEY` — Profile → API keys (server-side only, never shipped to the browser)
-   - `NEXT_PUBLIC_AGENT_ID` — the agent's ID from its dashboard page
+   - `ELEVENLABS_API_KEY` — create at **Developers → API Keys**. Either leave it unrestricted,
+     or restrict it to **ElevenAgents → Read** (that's the Conversational-AI / Agents scope; the
+     signed-URL endpoint lives under it). Bump to **Write** only if you ever get a 401/403.
+     Server-side only — never shipped to the browser.
+   - `NEXT_PUBLIC_AGENT_ID` — the agent's ID from its dashboard page.
 
 ## How the tool call flows
 ```
