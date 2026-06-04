@@ -1,0 +1,37 @@
+[
+  {
+    "snap_id": "snap_001",
+    "label": "arm-close",
+    "limb_ok": true,
+    "n_moles": 10,
+    "out_dir": "out/analysis/snap_001"
+  },
+  {
+    "snap_id": "snap_002",
+    "label": "hand-spread",
+    "limb_ok": true,
+    "n_moles": 26,
+    "out_dir": "out/analysis/snap_002"
+  },
+  {
+    "snap_id": "snap_003",
+    "label": "arm-extended",
+    "limb_ok": true,
+    "n_moles": 18,
+    "out_dir": "out/analysis/snap_003"
+  },
+  {
+    "snap_id": "snap_004",
+    "label": "face-torso",
+    "limb_ok": true,
+    "n_moles": 26,
+    "out_dir": "out/analysis/snap_004"
+  },
+  {
+    "snap_id": "snap_005",
+    "label": "legs",
+    "limb_ok": true,
+    "n_moles": 17,
+    "out_dir": "out/analysis/snap_005"
+  }
+]

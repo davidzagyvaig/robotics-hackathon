@@ -1,0 +1,243 @@
+{
+  "session": "demo_1780558932",
+  "pins": [
+    {
+      "id": "L001",
+      "position": [
+        -0.05715464989764651,
+        0.20074796349016807,
+        -0.6747524680019372
+      ],
+      "flag": true,
+      "tds": 6.57,
+      "label": "Benign keratosis",
+      "explanation": "This spot scored 6.57 on the ABCD scale (suspicious). The reference model's closest match was Benign keratosis (63% similarity). Because of its irregularity, it's been flagged for a closer look by your dermatologist. This is a documentation aid, not a diagnosis. A dermatologist reviews every result.",
+      "macro": "",
+      "region": "legs"
+    },
+    {
+      "id": "L002",
+      "position": [
+        0.061526507439977625,
+        0.1952398652226422,
+        -0.6027799839729324
+      ],
+      "flag": true,
+      "tds": 6.4,
+      "label": "Melanocytic nevus",
+      "explanation": "This spot scored 6.4 on the ABCD scale (suspicious). The reference model's closest match was Melanocytic nevus (78% similarity). Because of its irregularity, it's been flagged for a closer look by your dermatologist. This is a documentation aid, not a diagnosis. A dermatologist reviews every result.",
+      "macro": "",
+      "region": "legs"
+    },
+    {
+      "id": "L003",
+      "position": [
+        0.11029153743514,
+        0.19590083701474528,
+        -0.6005767446659221
+      ],
+      "flag": false,
+      "tds": 2.22,
+      "label": "Melanocytic nevus",
+      "explanation": "This spot scored 2.22 on the ABCD scale (benign-appearing). The reference model's closest match was Melanocytic nevus (76% similarity). Nothing here looks urgent, but it's logged so changes can be tracked over time. This is a documentation aid, not a diagnosis. A dermatologist reviews every result.",
+      "macro": "",
+      "region": "legs"
+    },
+    {
+      "id": "L004",
+      "position": [
+        0.06218747923208071,
+        0.1975899871501199,
+        -0.6035143970752692
+      ],
+      "flag": false,
+      "tds": 4.92,
+      "label": "Melanocytic nevus",
+      "explanation": "This spot scored 4.92 on the ABCD scale (borderline). The reference model's closest match was Melanocytic nevus (82% similarity). Nothing here looks urgent, but it's logged so changes can be tracked over time. This is a documentation aid, not a diagnosis. A dermatologist reviews every result.",
+      "macro": "",
+      "region": "legs"
+    },
+    {
+      "id": "L005",
+      "position": [
+        0.08693720078083031,
+        0.20544820734512348,
+        -0.6240779639406991
+      ],
+      "flag": false,
+      "tds": 1.72,
+      "label": "Melanocytic nevus",
+      "explanation": "This spot scored 1.72 on the ABCD scale (benign-appearing). The reference model's closest match was Melanocytic nevus (82% similarity). Nothing here looks urgent, but it's logged so changes can be tracked over time. This is a documentation aid, not a diagnosis. A dermatologist reviews every result.",
+      "macro": "",
+      "region": "legs"
+    },
+    {
+      "id": "L006",
+      "position": [
+        0.05770755930782634,
+        0.20530132472465612,
+        -0.6174682460196681
+      ],
+      "flag": false,
+      "tds": 3.9,
+      "label": "Melanocytic nevus",
+      "explanation": "This spot scored 3.9 on the ABCD scale (benign-appearing). The reference model's closest match was Melanocytic nevus (83% similarity). Nothing here looks urgent, but it's logged so changes can be tracked over time. This is a documentation aid, not a diagnosis. A dermatologist reviews every result.",
+      "macro": "",
+      "region": "legs"
+    },
+    {
+      "id": "L007",
+      "position": [
+        0.053888611175675075,
+        0.20721079879073173,
+        -0.6071864625869532
+      ],
+      "flag": true,
+      "tds": 6.37,
+      "label": "Melanocytic nevus",
+      "explanation": "This spot scored 6.37 on the ABCD scale (suspicious). The reference model's closest match was Melanocytic nevus (66% similarity). Because of its irregularity, it's been flagged for a closer look by your dermatologist. This is a documentation aid, not a diagnosis. A dermatologist reviews every result.",
+      "macro": "",
+      "region": "legs"
+    },
+    {
+      "id": "L008",
+      "position": [
+        0.05638561572362014,
+        0.20750456403166648,
+        -0.6189370722243417
+      ],
+      "flag": false,
+      "tds": 3.93,
+      "label": "Melanocytic nevus",
+      "explanation": "This spot scored 3.93 on the ABCD scale (benign-appearing). The reference model's closest match was Melanocytic nevus (73% similarity). Nothing here looks urgent, but it's logged so changes can be tracked over time. This is a documentation aid, not a diagnosis. A dermatologist reviews every result.",
+      "macro": "",
+      "region": "legs"
+    },
+    {
+      "id": "L009",
+      "position": [
+        0.059323268132967275,
+        0.2083858597544706,
+        -0.6182026591220049
+      ],
+      "flag": false,
+      "tds": 3.88,
+      "label": "Melanocytic nevus",
+      "explanation": "This spot scored 3.88 on the ABCD scale (benign-appearing). The reference model's closest match was Melanocytic nevus (75% similarity). Nothing here looks urgent, but it's logged so changes can be tracked over time. This is a documentation aid, not a diagnosis. A dermatologist reviews every result.",
+      "macro": "",
+      "region": "legs"
+    },
+    {
+      "id": "L010",
+      "position": [
+        0.006298642144251532,
+        0.22138497166583165,
+        -0.6960504479697038
+      ],
+      "flag": true,
+      "tds": 5.61,
+      "label": "Melanocytic nevus",
+      "explanation": "This spot scored 5.61 on the ABCD scale (suspicious). The reference model's closest match was Melanocytic nevus (50% similarity). Because of its irregularity, it's been flagged for a closer look by your dermatologist. This is a documentation aid, not a diagnosis. A dermatologist reviews every result.",
+      "macro": "",
+      "region": "legs"
+    },
+    {
+      "id": "L011",
+      "position": [
+        0.05601840917245175,
+        0.21058909906148096,
+        -0.6196714853266785
+      ],
+      "flag": false,
+      "tds": 4.13,
+      "label": "Melanocytic nevus",
+      "explanation": "This spot scored 4.13 on the ABCD scale (benign-appearing). The reference model's closest match was Melanocytic nevus (79% similarity). Nothing here looks urgent, but it's logged so changes can be tracked over time. This is a documentation aid, not a diagnosis. A dermatologist reviews every result.",
+      "macro": "",
+      "region": "legs"
+    },
+    {
+      "id": "L012",
+      "position": [
+        0.0852480506454557,
+        0.21558310815737108,
+        -0.627750029452383
+      ],
+      "flag": false,
+      "tds": 3.69,
+      "label": "Melanocytic nevus",
+      "explanation": "This spot scored 3.69 on the ABCD scale (benign-appearing). The reference model's closest match was Melanocytic nevus (73% similarity). Nothing here looks urgent, but it's logged so changes can be tracked over time. This is a documentation aid, not a diagnosis. A dermatologist reviews every result.",
+      "macro": "",
+      "region": "legs"
+    },
+    {
+      "id": "L013",
+      "position": [
+        0.02179475860355766,
+        0.30709098070853424,
+        -0.5748722860841347
+      ],
+      "flag": false,
+      "tds": 4.61,
+      "label": "Melanocytic nevus",
+      "explanation": "This spot scored 4.61 on the ABCD scale (benign-appearing). The reference model's closest match was Melanocytic nevus (80% similarity). Nothing here looks urgent, but it's logged so changes can be tracked over time. This is a documentation aid, not a diagnosis. A dermatologist reviews every result.",
+      "macro": "",
+      "region": "legs"
+    },
+    {
+      "id": "L014",
+      "position": [
+        -0.1912584823843431,
+        0.31619770317751034,
+        -0.6064520494846164
+      ],
+      "flag": false,
+      "tds": 4.8,
+      "label": "Melanocytic nevus",
+      "explanation": "This spot scored 4.8 on the ABCD scale (borderline). The reference model's closest match was Melanocytic nevus (59% similarity). Nothing here looks urgent, but it's logged so changes can be tracked over time. This is a documentation aid, not a diagnosis. A dermatologist reviews every result.",
+      "macro": "",
+      "region": "legs"
+    },
+    {
+      "id": "L015",
+      "position": [
+        -0.16533369987185464,
+        0.3164180271082114,
+        -0.6057176363822796
+      ],
+      "flag": false,
+      "tds": 4.82,
+      "label": "Melanocytic nevus",
+      "explanation": "This spot scored 4.82 on the ABCD scale (borderline). The reference model's closest match was Melanocytic nevus (61% similarity). Nothing here looks urgent, but it's logged so changes can be tracked over time. This is a documentation aid, not a diagnosis. A dermatologist reviews every result.",
+      "macro": "",
+      "region": "legs"
+    },
+    {
+      "id": "L016",
+      "position": [
+        -0.171869976482652,
+        0.3170789989003145,
+        -0.6226091377360256
+      ],
+      "flag": false,
+      "tds": 5.31,
+      "label": "Benign keratosis",
+      "explanation": "This spot scored 5.31 on the ABCD scale (borderline). The reference model's closest match was Benign keratosis (84% similarity). Nothing here looks urgent, but it's logged so changes can be tracked over time. This is a documentation aid, not a diagnosis. A dermatologist reviews every result.",
+      "macro": "",
+      "region": "legs"
+    },
+    {
+      "id": "L017",
+      "position": [
+        -0.1874395342521918,
+        0.3219261253757372,
+        -0.6130617674056474
+      ],
+      "flag": false,
+      "tds": 4.57,
+      "label": "Melanocytic nevus",
+      "explanation": "This spot scored 4.57 on the ABCD scale (benign-appearing). The reference model's closest match was Melanocytic nevus (69% similarity). Nothing here looks urgent, but it's logged so changes can be tracked over time. This is a documentation aid, not a diagnosis. A dermatologist reviews every result.",
+      "macro": "",
+      "region": "legs"
+    }
+  ]
+}
