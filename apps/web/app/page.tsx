@@ -46,7 +46,7 @@ export default function Page() {
             <p className="mt-1 text-xs text-muted">
               {connected
                 ? "Ask your tutor to teach you a letter or word — feel each dot rise."
-                : "Connect the device over USB to begin. You'll talk to a voice tutor and feel the dots move."}
+                : "Connect over USB or Bluetooth to begin. You'll talk to a voice tutor and feel the dots move."}
             </p>
           </div>
 
@@ -57,7 +57,7 @@ export default function Page() {
       </div>
 
       <footer className="border-t border-line px-6 py-2 text-center text-[10px] text-muted">
-        Chrome/Edge · WebSerial · ElevenLabs · ESP32-S3 — built at the Hungarian Robotics Hackathon
+        Chrome/Edge · USB + Bluetooth · ElevenLabs · ESP32-S3 — built at the Hungarian Robotics Hackathon
       </footer>
       </main>
     </ConversationProvider>

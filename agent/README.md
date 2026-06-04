@@ -13,7 +13,7 @@ so anyone on the team can reproduce it. The agent runs in the browser via `@elev
    match [`tools.json`](./tools.json):
    - **Name:** `render_braille`  ← must be exact, it's case-sensitive
    - **Description:** (from `tools.json`)
-   - **Parameter:** `text` — type `string`, required
+   - **Parameters:** `character` (string, required) and `seconds` (number, required)
    - Enable **"Wait for response"** so the agent hears the confirmation string back.
 5. **Auth.** Keep the agent **private**: enable "Require authentication" in the agent's
    Security settings, and (defense in depth) add your Vercel domain + `localhost` to the
@@ -28,10 +28,10 @@ so anyone on the team can reproduce it. The agent runs in the browser via `@elev
 
 ## How the tool call flows
 ```
-learner speaks → agent decides to show text → render_braille({text})
-   → runs in the browser (Conversation.tsx) → controller.renderBraille(text)
-   → textToCells() → WebSerial B<bits> frames → ESP32-S3 → servos move
-   → returns "Showed \"…\"" → agent speaks the next encouragement
+learner speaks → agent picks a letter → render_braille("R", 3)
+   → runs in the browser (Conversation.tsx) → controller.renderBraille("R", 3)
+   → charToBits("R") → B111010 over USB/BLE → ESP32-S3 → dots rise + buzz
+   → hold 3 s → Z (clear) → returns "Showed …" → agent speaks the next encouragement
 ```
 Because the tool is a **client** tool, it executes on the learner's machine, which is the only
 place that can reach their plugged-in device. A server-side webhook tool could not.

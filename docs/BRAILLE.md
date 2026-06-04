@@ -53,16 +53,14 @@ the next letter. (Word-level double-capitals are not implemented — not needed 
 
 Unknown characters render as a blank cell (`000000`) so pacing stays intact.
 
-## Speed (the potentiometer knob)
-The firmware streams the raw 12-bit ADC value as `POT <0-4095>` at ~10 Hz. The browser maps it
-([`apps/web/lib/speed.ts`](../apps/web/lib/speed.ts)):
+## Timing (who controls how long a letter shows)
+The **agent** decides per letter: `render_braille(character, seconds)` raises the cell, holds it for
+`seconds`, then drops every dot (`apps/web/lib/controller.ts`). The browser does the letter→pattern lookup
+here in `braille.ts` — the agent passes the **letter**, never a dot code.
 
-```
-cps     = 3 + (pot / 4095) * 7      # 3 … 10 characters per second
-delayMs = 1000 / cps                # ≈ 333 ms (slow) … 100 ms (fast) between characters
-```
-
-The delay is read **per character**, so turning the knob mid-word changes the pace live.
+The **potentiometer** sets the physical *sweep speed* on the device (how fast the dots rise), not the
+reading pace. The firmware still streams `POT`/`SPEED`/`CHARMS`, but the web ignores them today. Making the
+knob a reading-speed control again is in [`BACKLOG.md`](./BACKLOG.md).
 
 ## Scope / future
 MVP covers a–z, 0–9, space and the punctuation above (Grade 1 / uncontracted). Grade 2

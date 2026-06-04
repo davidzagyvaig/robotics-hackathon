@@ -1,16 +1,22 @@
 {
-  "_comment": "The single CLIENT tool BrailleBuddy uses. Recreate this in the ElevenLabs dashboard (Agent → Tools → Add tool → type: Client). The name MUST be exactly render_braille — it is matched case-sensitively to the function registered in apps/web/components/Conversation.tsx.",
+  "_comment": "The single CLIENT tool BrailleBuddy uses. Recreate this in the ElevenLabs dashboard (Agent → Tools → Add tool → type: Client). The name MUST be exactly render_braille — matched case-sensitively to the function in apps/web/components/Conversation.tsx. Pass the LETTER itself; the web app (apps/web/lib/braille.ts) looks up the dot pattern.",
   "type": "client",
   "name": "render_braille",
-  "description": "Physically display text on the BrailleBuddy device, one Braille cell at a time, so the learner can feel each character. Call this whenever you want the learner to feel a letter, number, word, or short phrase. Pacing is controlled by the learner's speed knob, not by you.",
+  "description": "Raise the pins on the single Braille cell to show ONE character, then drop them after the given time. Call once per letter you want the learner to feel. Pass the letter itself (not a dot code) — the device looks up the pattern.",
   "expects_response": true,
   "response_timeout_secs": 30,
   "parameters": [
     {
-      "identifier": "text",
+      "identifier": "character",
       "type": "string",
       "required": true,
-      "description": "The exact text to render in Braille — e.g. \"a\", \"cat\", or \"hello world\". Use plain letters, digits, spaces and simple punctuation."
+      "description": "The single character to show, e.g. \"R\". If more than one character is sent, only the first is used."
+    },
+    {
+      "identifier": "seconds",
+      "type": "number",
+      "required": true,
+      "description": "How long the character stays raised before the pins drop, in seconds. Use 3 for teaching, 2 for test words."
     }
   ]
 }

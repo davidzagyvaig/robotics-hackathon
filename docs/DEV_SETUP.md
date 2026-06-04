@@ -5,8 +5,9 @@ firmware). Everything works in **Cursor** (a VS Code fork) using extensions from
 
 ## Prerequisites
 - **Node 18+** (tested on Node 24) and npm.
-- **Chrome or Edge** on desktop — WebSerial (the device link) is Chromium-only and needs HTTPS
-  or `localhost`. Safari/Firefox can't talk to the device.
+- **Chrome or Edge** for the device link: **USB (WebSerial)** is desktop-Chromium only;
+  **Bluetooth (Web Bluetooth)** works on desktop Chromium **and Android Chrome**. Both need HTTPS or
+  `localhost`. Safari/Firefox can't reach the device.
 
 ## Web app
 ```bash
@@ -39,18 +40,18 @@ exact S3 board isn't a generic devkit, change `board` (`pio boards esp32s3` list
 ### Simulate (no board needed)
 1. `pio run` (Wokwi needs the built `.bin`/`.elf` referenced by `wokwi.toml`).
 2. `F1` → **Wokwi: Start Simulator**. `diagram.json` wires 6 servos + a pot to the S3.
-3. In the simulator's serial terminal: type `ID?` → `BRAILLEBUDDY v1`, `B100000` → dot 1 horn
-   swings, drag the pot → `POT` values change.
+3. In the simulator's serial terminal: type `ID?` → `BRAILLEBUDDY v2`, `B100000` → dot 1 horn
+   swings, drag the pot → `POT`/`SPEED`/`CHARMS` change. (BLE, haptic, and touch don't simulate.)
    *(The sim's serial is over UART; the real board uses native USB CDC — identical logic.)*
 
 ## Deploy (Vercel)
 - Import the repo in Vercel. Set **Root Directory = `apps/web`** (it's a monorepo).
 - Env vars: `ELEVENLABS_API_KEY` and `NEXT_PUBLIC_AGENT_ID`.
-- Vercel serves HTTPS, which WebSerial requires. Open the deployed URL in Chrome/Edge, plug in
-  the device, connect, and go.
+- Vercel serves HTTPS, which WebSerial and Web Bluetooth require. Open the deployed URL in Chrome/Edge
+  (or Android Chrome for Bluetooth), connect, and go.
 
 ## Where things live
-- `apps/web/` — Next.js app (UI, WebSerial, braille/speed logic, signed-URL route).
+- `apps/web/` — Next.js app (UI, USB/BLE transport, braille logic, signed-URL route).
 - `firmware/braillebuddy_esp32/` — PlatformIO project (`src/main.cpp`, `platformio.ini`, Wokwi files).
 - `agent/` — ElevenLabs agent prompt + tool definition + setup.
 - `docs/` — this folder.

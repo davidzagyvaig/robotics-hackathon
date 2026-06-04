@@ -10,9 +10,10 @@ import { controller } from "@/lib/controller";
 // inside a <ConversationProvider> (added in app/page.tsx).
 
 // Client tools execute in the browser; `parameters` is typed `any` by the SDK.
+// The agent passes a single character + how long to hold it; braille.ts does the lookup.
 const clientTools = {
-  render_braille: async (parameters: { text: string }) =>
-    controller.renderBraille(parameters.text),
+  render_braille: async (parameters: { character: string; seconds: number }) =>
+    controller.renderBraille(parameters.character, parameters.seconds),
 };
 
 export default function Conversation() {

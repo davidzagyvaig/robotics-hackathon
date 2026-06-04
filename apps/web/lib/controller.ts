@@ -1,35 +1,41 @@
-// BrailleBuddy controller — a small module-level singleton that owns the device
-// connection and the shared UI state. React components subscribe via useBrailleState();
-// the ElevenLabs client tool calls controller.renderBraille().
+// BrailleBuddy controller — a module-level singleton that owns the device connection
+// (USB or BLE) and the shared UI state. React subscribes via useBrailleState(); the
+// ElevenLabs client tool calls controller.renderBraille().
 
 import { useSyncExternalStore } from "react";
-import { BrailleSerial } from "./serial";
-import { textToCells, CELL_DOWN } from "./braille";
-import { potToCps, potToDelayMs } from "./speed";
+import {
+  Transport,
+  TransportKind,
+  isWebSerialSupported,
+  isBleSupported,
+} from "./transport";
+import { SerialTransport } from "./serialTransport";
+import { BleTransport } from "./bleTransport";
+import { charToBits, CELL_DOWN } from "./braille";
 
 export type BrailleState = {
-  supported: boolean;
+  usbSupported: boolean;
+  bleSupported: boolean;
   connected: boolean;
   connecting: boolean;
+  transport: TransportKind | null;
   deviceName: string | null;
   error: string | null;
-  /** Raw 0..4095 potentiometer value (reading-speed knob). */
-  pot: number;
   /** The cell currently shown on the device, as a 6-bit string. */
   currentCell: string;
-  /** Label of the character currently shown (for the on-screen mirror). */
+  /** The character currently shown (for the on-screen mirror). */
   currentLabel: string | null;
-  /** True while a render_braille() call is streaming characters. */
   busy: boolean;
 };
 
 const INITIAL: BrailleState = {
-  supported: true, // assume true on the server; corrected on the client after mount
+  usbSupported: false,
+  bleSupported: false,
   connected: false,
   connecting: false,
+  transport: null,
   deviceName: null,
   error: null,
-  pot: 0,
   currentCell: CELL_DOWN,
   currentLabel: null,
   busy: false,
@@ -38,15 +44,15 @@ const INITIAL: BrailleState = {
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 class BrailleController {
-  private serial: BrailleSerial | null = null;
+  private transport: Transport | null = null;
   private state: BrailleState = INITIAL;
   private listeners = new Set<() => void>();
+  private pendingIdentify: ((name: string) => void) | null = null;
 
   subscribe = (cb: () => void): (() => void) => {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);
   };
-
   getSnapshot = (): BrailleState => this.state;
   getServerSnapshot = (): BrailleState => INITIAL;
 
@@ -55,34 +61,35 @@ class BrailleController {
     this.listeners.forEach((l) => l());
   }
 
-  /** Current reading speed in characters/second, derived from the pot. */
-  get cps(): number {
-    return potToCps(this.state.pot);
-  }
-
-  /** Reflect WebSerial support on the client (called from a component effect). */
+  /** Reflect which transports this environment can actually use (call from an effect). */
   reportSupport(): void {
-    this.set({ supported: BrailleSerial.isSupported() });
+    this.set({ usbSupported: isWebSerialSupported(), bleSupported: isBleSupported() });
   }
 
-  private attach(serial: BrailleSerial): void {
-    serial.onPot = (v) => this.set({ pot: v });
-    this.serial = serial;
-  }
+  // The device streams POT/SPEED/CHARMS/TOUCH/SW at ~10 Hz; we intentionally ignore them
+  // (timing is agent-driven now). We only listen for the identity reply.
+  private handleLine = (line: string): void => {
+    if (line.startsWith("BRAILLEBUDDY")) this.pendingIdentify?.(line.trim());
+  };
 
-  /** Prompt for a port, open it, and confirm it's a BrailleBuddy. */
-  async connect(): Promise<void> {
+  async connect(kind: TransportKind): Promise<void> {
     if (this.state.connecting || this.state.connected) return;
     this.set({ connecting: true, error: null });
-    const serial = new BrailleSerial();
+    const t: Transport = kind === "usb" ? new SerialTransport() : new BleTransport();
+    t.setOnLine(this.handleLine);
+    t.setOnDisconnect(() => this.onDisconnect());
     try {
-      this.attach(serial);
-      await serial.connect();
-      const name = await serial.identify();
-      this.set({ connected: true, connecting: false, deviceName: name });
+      await t.connect();
+      this.transport = t;
+      const name = await this.identify(t);
+      this.set({ connected: true, connecting: false, transport: kind, deviceName: name });
     } catch (e) {
-      await serial.disconnect().catch(() => {});
-      this.serial = null;
+      try {
+        await t.disconnect();
+      } catch {
+        /* ignore */
+      }
+      this.transport = null;
       this.set({
         connecting: false,
         connected: false,
@@ -91,58 +98,70 @@ class BrailleController {
     }
   }
 
-  /** Silently re-open a previously granted device, if one is present. */
-  async tryReconnect(): Promise<boolean> {
-    if (!BrailleSerial.isSupported()) return false;
-    const ports = await navigator.serial.getPorts();
-    for (const port of ports) {
-      const serial = new BrailleSerial();
-      try {
-        this.attach(serial);
-        await serial.open(port);
-        const name = await serial.identify();
-        this.set({ connected: true, deviceName: name, error: null });
-        return true;
-      } catch {
-        await serial.disconnect().catch(() => {});
-        this.serial = null;
-      }
-    }
-    return false;
+  private identify(t: Transport, timeoutMs = 2500): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingIdentify = null;
+        reject(new Error("No response from a BrailleBuddy device."));
+      }, timeoutMs);
+      this.pendingIdentify = (name) => {
+        clearTimeout(timer);
+        this.pendingIdentify = null;
+        resolve(name);
+      };
+      t.send("ID?").catch((e) => {
+        clearTimeout(timer);
+        this.pendingIdentify = null;
+        reject(e);
+      });
+    });
+  }
+
+  private onDisconnect(): void {
+    this.transport = null;
+    this.set({
+      connected: false,
+      transport: null,
+      deviceName: null,
+      currentCell: CELL_DOWN,
+      currentLabel: null,
+    });
   }
 
   async disconnect(): Promise<void> {
-    await this.serial?.disconnect().catch(() => {});
-    this.serial = null;
-    this.set({ connected: false, deviceName: null, currentCell: CELL_DOWN, currentLabel: null });
+    try {
+      await this.transport?.disconnect();
+    } catch {
+      /* ignore */
+    }
+    this.onDisconnect();
   }
 
   /**
-   * Stream `text` to the device one braille cell at a time, pacing each character
-   * by the live potentiometer speed. This is the body of the `render_braille`
-   * client tool the ElevenLabs agent calls.
+   * The `render_braille` client tool: show one character on the cell for `seconds`,
+   * then drop every dot. The agent passes a letter (we guard to the first character)
+   * and the browser looks up the dot pattern in braille.ts.
    */
-  async renderBraille(text: string): Promise<string> {
-    if (!this.serial || !this.state.connected) {
+  async renderBraille(character: string, seconds: number): Promise<string> {
+    if (!this.transport || !this.state.connected) {
       return "No BrailleBuddy device is connected, so I couldn't show that.";
     }
-    const cells = textToCells(text);
-    this.set({ busy: true });
+    const ch = (character ?? "").trim()[0]; // guardrail: only the first character
+    if (!ch) return "No character was given to show.";
+    const bits = charToBits(ch);
+    if (!bits) return `I don't have a braille pattern for "${ch}".`;
+
+    const holdMs = Math.max(0.3, Math.min(seconds || 2, 15)) * 1000; // clamp 0.3–15 s
+    this.set({ busy: true, currentCell: bits, currentLabel: ch.toUpperCase() });
     try {
-      for (const cell of cells) {
-        await this.serial.sendCell(cell.bits);
-        this.set({ currentCell: cell.bits, currentLabel: cell.label });
-        await delay(potToDelayMs(this.state.pot));
-      }
-      await this.serial.clear();
+      await this.transport.send(`B${bits}`);
+      await delay(holdMs);
+      await this.transport.send("Z");
       this.set({ currentCell: CELL_DOWN, currentLabel: null, busy: false });
-      const cps = this.cps.toFixed(1);
-      return `Showed "${text}" on BrailleBuddy at about ${cps} characters per second.`;
+      return `Showed "${ch.toUpperCase()}" for ${Math.round(holdMs / 1000)} seconds.`;
     } catch (e) {
       this.set({ busy: false });
-      return `Something went wrong driving the device: ${
-        e instanceof Error ? e.message : "unknown error"
-      }.`;
+      return `The cell isn't responding: ${e instanceof Error ? e.message : "unknown error"}.`;
     }
   }
 }
