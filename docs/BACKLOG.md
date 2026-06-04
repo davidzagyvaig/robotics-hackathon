@@ -58,4 +58,8 @@ so most are web/agent-side work.
   site silently reconnects (`navigator.serial.getPorts()`) and auto-starts the conversation.
 
 ## Other ideas raised by the team
+- **Remove the dot-char map from the agent prompt.** The reference table (letters → dot codes) is still in
+  `agent/prompt.md` only so the agent can describe patterns verbally; the tool no longer needs it (the
+  browser does the lookup). Take it out and have the agent describe patterns another way (or drop the
+  per-letter dot description).
 - _(running list — add as they come up)_
