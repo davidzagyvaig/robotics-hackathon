@@ -39,6 +39,8 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
   const profile = useProfile();
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<Line[]>([]);
+  const [launchState, setLaunchState] = useState<"idle" | "opening" | "live">("idle");
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const idRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -55,7 +57,14 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
 
   const status = conversation.status;
   const isSpeaking = conversation.isSpeaking;
+  const isListening = conversation.isListening;
   const active = status === "connected" || status === "connecting";
+  const phase = launchState === "opening" ? "opening" : isSpeaking ? "speaking" : isListening ? "listening" : "idle";
+
+  useEffect(() => {
+    if (active) setLaunchState("live");
+    if (!active) setLaunchState("idle");
+  }, [active]);
 
   useEffect(() => {
     void progress.hydrate();
@@ -71,19 +80,40 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [transcript]);
 
+  useEffect(() => {
+    let alive = true;
+    const warm = async () => {
+      try {
+        const res = await fetch("/api/get-signed-url");
+        const data = await res.json();
+        if (alive && res.ok && data.signedUrl) setSignedUrl(data.signedUrl);
+      } catch {
+        if (alive) setSignedUrl(null);
+      }
+    };
+    void warm();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const start = useCallback(async () => {
     setError(null);
     setTranscript([]); // fresh conversation each time you start
+    setLaunchState("opening");
     try {
       controller.connectSimulated();
       await controller.clear();
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      const res = await fetch("/api/get-signed-url");
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to get a signed URL");
+      const url = signedUrl ?? (await (async () => {
+        const res = await fetch("/api/get-signed-url");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Failed to get a signed URL");
+        return data.signedUrl as string;
+      })());
       const lesson = lessonByLevel(profile.level);
       conversation.startSession({
-        signedUrl: data.signedUrl,
+        signedUrl: url,
         clientTools,
         dynamicVariables: {
           user_name: "unknown",
@@ -94,6 +124,7 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
         },
       });
     } catch (e) {
+      setLaunchState("idle");
       setError(e instanceof Error ? e.message : "Could not start the conversation.");
     }
   }, [conversation, profile]);
@@ -106,18 +137,44 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
         <div className="flex items-center gap-2.5">
           <span
             className={`h-3 w-3 rounded-full ${
-              !active ? "bg-swan" : isSpeaking ? "bg-green animate-wiggle" : "bg-green"
+              phase === "idle" ? "bg-swan" : phase === "opening" ? "bg-gold animate-wiggle" : isSpeaking ? "bg-green animate-wiggle" : "bg-green"
             }`}
           />
-          <span className="text-sm font-extrabold text-wolf">
-            {!active
-              ? "Dot is ready"
-              : status === "connecting"
-                ? "connecting…"
-                : isSpeaking
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-extrabold text-wolf">
+              {phase === "opening"
+                ? "Opening mic…"
+                : phase === "speaking"
                   ? "Dot is talking"
-                  : "listening — say hi!"}
-          </span>
+                  : phase === "listening"
+                    ? "Mic live — talk to Dot"
+                    : "Dot is ready"}
+            </span>
+            <div className="flex items-end gap-1.5" aria-hidden>
+              {[0, 1, 2, 3].map((i) => (
+                <span
+                  key={i}
+                  className={`w-1.5 rounded-full ${
+                    phase === "idle"
+                      ? "bg-swan"
+                      : phase === "opening"
+                        ? "bg-gold"
+                        : isSpeaking
+                          ? "bg-green"
+                          : "bg-green"
+                  }`}
+                  style={{
+                    height: phase === "idle" ? 6 : 7 + (i % 2) * 5,
+                    opacity: phase === "idle" ? 0.55 : 1,
+                    animation:
+                      phase === "idle"
+                        ? undefined
+                        : `pulse 900ms ease-in-out ${i * 110}ms infinite`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
         </div>
         <button
           onClick={() => progress.setVoice(!profile.voiceEnabled)}
@@ -136,8 +193,10 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
               🦉
             </div>
             <p className="max-w-xs text-base font-bold leading-relaxed text-wolf">
-              {active
-                ? "Say hello — Dot will ask your name, then start your lesson."
+              {phase === "opening"
+                ? "Opening the mic now. You should see Dot wake up in a moment."
+                : active
+                  ? "Say hello — Dot will ask your name, then start your lesson."
                 : profile.name
                   ? `Welcome back, ${profile.name}! Tap start to keep going.`
                   : "Meet Dot, your braille coach. Tap start and just talk."}
