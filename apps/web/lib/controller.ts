@@ -36,6 +36,8 @@ export type BrailleState = {
   demoCaption: string | null;
   /** True while the scripted demo is running. */
   demoRunning: boolean;
+  /** True when the demo is holding a dot and waiting for the learner to confirm they feel it. */
+  demoAwaitingConfirm: boolean;
 };
 
 const INITIAL: BrailleState = {
@@ -54,6 +56,7 @@ const INITIAL: BrailleState = {
   busy: false,
   demoCaption: null,
   demoRunning: false,
+  demoAwaitingConfirm: false,
 };
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -246,36 +249,84 @@ class BrailleController {
       return `The cell isn't responding: ${e instanceof Error ? e.message : "unknown error"}.`;
     }
   }
+  // --- interactive demo: hold a dot, ask "can you feel it?", wait for the learner ---
+  private demoResolve: (() => void) | null = null;
+
+  private waitForFeel(): Promise<void> {
+    this.set({ demoAwaitingConfirm: true });
+    return new Promise<void>((resolve) => {
+      this.demoResolve = () => {
+        this.demoResolve = null;
+        this.set({ demoAwaitingConfirm: false });
+        resolve();
+      };
+    });
+  }
+
+  /** Learner tapped "I can feel it" (or said yes). Advances the interactive demo. */
+  confirmFeel(): void {
+    this.demoResolve?.();
+  }
+
   /**
-   * A scripted, no-key preview lesson: teaches A, B, C then reads "cat" on the cell with
-   * captions. Lets anyone try the dashboard before the voice agent is wired, and is clean
-   * B-roll for the launch video. Uses on-screen mode if nothing is connected.
+   * Interactive, paced preview — mirrors how the voice agent teaches: raise a letter, ask
+   * "can you feel it?", WAIT for the learner to confirm, then move on. Works with no voice
+   * key and no hardware (on-screen cell), and reads identically on the real device.
    */
   async runDemo(): Promise<void> {
     if (this.state.busy || this.state.demoRunning) return;
     if (!this.state.connected) this.connectSimulated();
     this.set({ demoRunning: true });
     const say = (t: string | null) => this.set({ demoCaption: t });
-    const steps: Array<() => Promise<unknown>> = [
-      () => (say("Let's learn the letter A — just dot one."), this.renderBraille("a", 1.6)),
-      () => (say("Now B — dots one and two."), this.renderBraille("b", 1.6)),
-      () => (say("And C — dots one and four."), this.renderBraille("c", 1.6)),
-      () => (say("Now feel a whole word, one letter at a time…"), delay(900)),
-      () => this.renderWord("cat", 1.2),
-      () => (say("That spelled “cat.” You just read braille. 🎉"), delay(1800)),
-    ];
+    const alive = () => this.state.demoRunning;
+
     try {
-      for (const step of steps) {
-        if (!this.state.demoRunning) break; // allow cancel
-        await step();
-      }
+      say("Let's try the cell together. I'll raise a letter — feel it, then tap “I can feel it.”");
+      await delay(2600);
+
+      // C — hold until the learner confirms
+      if (!alive()) return;
+      say("Here's the letter C — two dots along the top of the cell.");
+      await this.showLetter("c");
+      await delay(600);
+      say("Can you feel those two dots? Take your time… then tap below.");
+      await this.waitForFeel();
+      if (!alive()) return;
+      await this.clear();
+      say("That's C. Beautifully done.");
+      await delay(1800);
+
+      // A
+      if (!alive()) return;
+      say("Now the letter A — just one dot, top-left.");
+      await this.showLetter("a");
+      await delay(600);
+      say("Feel that single dot? Tap when you've got it.");
+      await this.waitForFeel();
+      if (!alive()) return;
+      await this.clear();
+      say("That's A. You're a natural.");
+      await delay(1600);
+
+      // the word
+      if (!alive()) return;
+      say("Now let's read a whole word — cat. Feel each letter as it rises.");
+      await delay(2200);
+      if (!alive()) return;
+      await this.renderWord("cat", 2.0);
+      if (!alive()) return;
+      say("C… A… T. That spells “cat” — you just read braille. 🎉");
+      await delay(3000);
     } finally {
-      this.set({ demoRunning: false, demoCaption: null });
+      this.demoResolve = null;
+      this.set({ demoRunning: false, demoCaption: null, demoAwaitingConfirm: false });
+      await this.clear();
     }
   }
 
   stopDemo(): void {
-    this.set({ demoRunning: false, demoCaption: null });
+    this.set({ demoRunning: false });
+    this.demoResolve?.(); // unblock any pending wait so the loop can exit
   }
 
   /** Raise a letter and HOLD it (no auto-clear) — used by Quiz mode for "what is this?". */

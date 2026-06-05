@@ -11,7 +11,7 @@ import { lessonByLevel, lettersThroughLevel, MAX_LEVEL } from "@/lib/curriculum"
 // RIGHT pane: the cell simulation. Big cell mirrors the device; a word strip shows the
 // current word with the active letter highlighted; a level bar shows progress.
 export default function LessonStage() {
-  const { currentWord, wordIndex, demoCaption, demoRunning } = useBrailleState();
+  const { currentWord, wordIndex, demoCaption, demoRunning, demoAwaitingConfirm } = useBrailleState();
   const profile = useProfile();
   const lesson = lessonByLevel(profile.level);
   const cells = currentWord ? textToCells(currentWord) : [];
@@ -42,7 +42,7 @@ export default function LessonStage() {
 
       {/* cell + word strip */}
       <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-6">
-        <div className="h-6">
+        <div className="min-h-[1.5rem] px-4">
           {demoCaption && (
             <p className="animate-bounceIn text-center text-base font-extrabold text-green-dark">
               {demoCaption}
@@ -51,6 +51,16 @@ export default function LessonStage() {
         </div>
 
         <BrailleCell />
+
+        {/* interactive confirm — the demo waits here until the learner feels the dots */}
+        {demoAwaitingConfirm && (
+          <button
+            onClick={() => controller.confirmFeel()}
+            className="btn3d btn-green animate-bounceIn text-base"
+          >
+            ✓ I can feel it
+          </button>
+        )}
 
         <div className="min-h-[92px] w-full max-w-md">
           {currentWord ? (
