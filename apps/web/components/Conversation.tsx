@@ -17,10 +17,19 @@ const clientTools = {
       ? `New learner "${r.name}" created. Start at level 1.`
       : `Returning learner "${r.name}", level ${r.level}, ${r.mastered.length} letters mastered, ${r.streak}-day streak. Greet them back and resume.`;
   },
-  render_braille: async (p: { character: string; seconds: number }) =>
-    controller.renderBraille(p.character, p.seconds),
-  render_word: async (p: { word: string; seconds_per_letter?: number; seconds?: number }) =>
-    controller.renderWord(p.word, p.seconds_per_letter ?? p.seconds ?? 1.5),
+  // Canonical tool: render any TEXT on the cell. A single character is held as one letter;
+  // a longer string is stepped across the cell as a word. Accepts text/character/word so it
+  // works no matter how the dashboard tool is defined.
+  render_braille: async (p: { text?: string; character?: string; word?: string; seconds?: number }) => {
+    const text = (p.text ?? p.character ?? p.word ?? "").trim();
+    if (!text) return "No text was given to show.";
+    return [...text].length <= 1
+      ? controller.renderBraille(text, p.seconds ?? 4)
+      : controller.renderWord(text, 1.5);
+  },
+  // alias kept for compatibility if a render_word tool is ever configured
+  render_word: async (p: { word?: string; text?: string; seconds_per_letter?: number }) =>
+    controller.renderWord(p.word ?? p.text ?? "", p.seconds_per_letter ?? 1.5),
 };
 
 type Line = { id: number; role: "user" | "ai"; text: string };
