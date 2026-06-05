@@ -41,6 +41,7 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
   const [transcript, setTranscript] = useState<Line[]>([]);
   const [launchState, setLaunchState] = useState<"idle" | "opening" | "live">("idle");
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
+  const [micBars, setMicBars] = useState<number[]>(Array.from({ length: 12 }, () => 0.12));
   const idRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -79,6 +80,44 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [transcript]);
+
+  useEffect(() => {
+    if (!active) {
+      setMicBars(Array.from({ length: 12 }, (_, i) => (i % 3 === 0 ? 0.15 : 0.08)));
+      return;
+    }
+
+    let frame = 0;
+    let alive = true;
+
+    const sample = () => {
+      if (!alive) return;
+
+      const data = conversation.getInputByteFrequencyData?.() ?? new Uint8Array();
+      const next = Array.from({ length: 12 }, (_, i) => {
+        const start = Math.floor((data.length * i) / 12);
+        const end = Math.max(start + 1, Math.floor((data.length * (i + 1)) / 12));
+        let sum = 0;
+        let count = 0;
+        for (let j = start; j < end && j < data.length; j += 1) {
+          sum += data[j];
+          count += 1;
+        }
+        const avg = count ? sum / count / 255 : 0;
+        const floor = phase === "speaking" || phase === "listening" ? 0.06 : 0.03;
+        return Math.min(1, floor + avg * 0.95);
+      });
+
+      setMicBars((prev) => next.map((value, i) => prev[i] * 0.55 + value * 0.45));
+      frame = window.requestAnimationFrame(sample);
+    };
+
+    frame = window.requestAnimationFrame(sample);
+    return () => {
+      alive = false;
+      window.cancelAnimationFrame(frame);
+    };
+  }, [active, conversation, phase]);
 
   useEffect(() => {
     let alive = true;
@@ -150,29 +189,23 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
                     ? "Mic live — talk to Dot"
                     : "Dot is ready"}
             </span>
-            <div className="flex items-end gap-1.5" aria-hidden>
-              {[0, 1, 2, 3].map((i) => (
-                <span
-                  key={i}
-                  className={`w-1.5 rounded-full ${
-                    phase === "idle"
-                      ? "bg-swan"
-                      : phase === "opening"
-                        ? "bg-gold"
-                        : isSpeaking
-                          ? "bg-green"
-                          : "bg-green"
-                  }`}
-                  style={{
-                    height: phase === "idle" ? 6 : 7 + (i % 2) * 5,
-                    opacity: phase === "idle" ? 0.55 : 1,
-                    animation:
-                      phase === "idle"
-                        ? undefined
-                        : `pulse 900ms ease-in-out ${i * 110}ms infinite`,
-                  }}
-                />
-              ))}
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 items-end gap-[3px] rounded-full border border-swan bg-white px-2 py-1 shadow-[0_2px_0_rgba(0,0,0,0.04)]" aria-hidden>
+                {micBars.map((level, i) => {
+                  const hue = phase === "idle" ? "bg-swan" : phase === "opening" ? "bg-gold" : "bg-green";
+                  const height = Math.max(6, Math.round(6 + level * 22 + (i % 3) * 1.5));
+                  return (
+                    <span
+                      key={i}
+                      className={`w-1 rounded-full ${hue}`}
+                      style={{ height, opacity: phase === "idle" ? 0.45 : 1 }}
+                    />
+                  );
+                })}
+              </div>
+              <span className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-hare">
+                {phase === "opening" ? "sending" : phase === "listening" ? "listening" : phase === "speaking" ? "talking" : "quiet"}
+              </span>
             </div>
           </div>
         </div>
@@ -201,6 +234,15 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
                   ? `Welcome back, ${profile.name}! Tap start to keep going.`
                   : "Meet Dot, your braille coach. Tap start and just talk."}
             </p>
+            {active && (
+              <div className="mt-1 rounded-full border border-swan bg-white px-4 py-2 text-xs font-extrabold uppercase tracking-[0.16em] text-hare">
+                {phase === "opening"
+                  ? "Mic opening"
+                  : phase === "speaking"
+                    ? "Dot is speaking"
+                    : "Speak now"}
+              </div>
+            )}
           </div>
         ) : (
           transcript.map((l) => (
