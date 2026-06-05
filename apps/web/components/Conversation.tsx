@@ -117,14 +117,16 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
     };
   }, [active, conversation, phase]);
 
-  // Warm a WebRTC token (UDP transport, lowest latency) so Start is instant.
+  // Warm a signed URL (WebSocket) so Start is instant. WebSocket reliably streams the
+  // mic upstream + returns transcripts in this SDK; audio quality is handled agent-side
+  // (44.1kHz / turbo_v2) and turn-taking is "patient" so it won't cut the learner off.
   useEffect(() => {
     let alive = true;
     const warm = async () => {
       try {
-        const res = await fetch("/api/get-conversation-token");
+        const res = await fetch("/api/get-signed-url");
         const data = await res.json();
-        if (alive && res.ok && data.token) setSignedUrl(data.token);
+        if (alive && res.ok && data.signedUrl) setSignedUrl(data.signedUrl);
       } catch {
         if (alive) setSignedUrl(null);
       }
@@ -139,49 +141,33 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
     setError(null);
     setTranscript([]); // fresh conversation each time you start
     setLaunchState("opening");
-    const dynamicVariables = {
-      user_name: "unknown",
-      is_returning: "no",
-      level: "1",
-      lesson_title: "First five",
-      known_letters: "none yet",
-    };
     try {
       controller.connectSimulated();
       await controller.clear();
       await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      // Prefer WebRTC (UDP / LiveKit) — lowest latency + proper audio jitter handling.
-      const token =
+      const url =
         signedUrl ??
         (await (async () => {
-          const res = await fetch("/api/get-conversation-token");
+          const res = await fetch("/api/get-signed-url");
           const data = await res.json();
-          if (!res.ok) throw new Error(data.error ?? "Failed to get a token");
-          return data.token as string;
+          if (!res.ok) throw new Error(data.error ?? "Failed to get a signed URL");
+          return data.signedUrl as string;
         })());
       conversation.startSession({
-        conversationToken: token,
-        connectionType: "webrtc",
+        signedUrl: url,
+        connectionType: "websocket",
         clientTools,
-        dynamicVariables,
+        dynamicVariables: {
+          user_name: "unknown",
+          is_returning: "no",
+          level: "1",
+          lesson_title: "First five",
+          known_letters: "none yet",
+        },
       });
-    } catch (webrtcErr) {
-      // Fallback: WebSocket signed URL if WebRTC isn't available.
-      try {
-        const res = await fetch("/api/get-signed-url");
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Failed to get a signed URL");
-        conversation.startSession({
-          signedUrl: data.signedUrl,
-          connectionType: "websocket",
-          clientTools,
-          dynamicVariables,
-        });
-      } catch (e) {
-        setLaunchState("idle");
-        setError(e instanceof Error ? e.message : "Could not start the conversation.");
-      }
+    } catch (e) {
+      setLaunchState("idle");
+      setError(e instanceof Error ? e.message : "Could not start the conversation.");
     }
   }, [conversation, signedUrl]);
 
