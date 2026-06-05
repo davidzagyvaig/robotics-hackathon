@@ -117,13 +117,14 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
     };
   }, [active, conversation, phase]);
 
+  // Warm a WebRTC token (UDP transport, lowest latency) so Start is instant.
   useEffect(() => {
     let alive = true;
     const warm = async () => {
       try {
-        const res = await fetch("/api/get-signed-url");
+        const res = await fetch("/api/get-conversation-token");
         const data = await res.json();
-        if (alive && res.ok && data.signedUrl) setSignedUrl(data.signedUrl);
+        if (alive && res.ok && data.token) setSignedUrl(data.token);
       } catch {
         if (alive) setSignedUrl(null);
       }
@@ -138,33 +139,51 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
     setError(null);
     setTranscript([]); // fresh conversation each time you start
     setLaunchState("opening");
+    const dynamicVariables = {
+      user_name: "unknown",
+      is_returning: "no",
+      level: "1",
+      lesson_title: "First five",
+      known_letters: "none yet",
+    };
     try {
       controller.connectSimulated();
       await controller.clear();
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      const url = signedUrl ?? (await (async () => {
+
+      // Prefer WebRTC (UDP / LiveKit) — lowest latency + proper audio jitter handling.
+      const token =
+        signedUrl ??
+        (await (async () => {
+          const res = await fetch("/api/get-conversation-token");
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error ?? "Failed to get a token");
+          return data.token as string;
+        })());
+      conversation.startSession({
+        conversationToken: token,
+        connectionType: "webrtc",
+        clientTools,
+        dynamicVariables,
+      });
+    } catch (webrtcErr) {
+      // Fallback: WebSocket signed URL if WebRTC isn't available.
+      try {
         const res = await fetch("/api/get-signed-url");
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to get a signed URL");
-        return data.signedUrl as string;
-      })());
-      conversation.startSession({
-        signedUrl: url,
-        clientTools,
-        // Every session starts fresh from onboarding (the cell has no sensors / no resume).
-        dynamicVariables: {
-          user_name: "unknown",
-          is_returning: "no",
-          level: "1",
-          lesson_title: "First five",
-          known_letters: "none yet",
-        },
-      });
-    } catch (e) {
-      setLaunchState("idle");
-      setError(e instanceof Error ? e.message : "Could not start the conversation.");
+        conversation.startSession({
+          signedUrl: data.signedUrl,
+          connectionType: "websocket",
+          clientTools,
+          dynamicVariables,
+        });
+      } catch (e) {
+        setLaunchState("idle");
+        setError(e instanceof Error ? e.message : "Could not start the conversation.");
+      }
     }
-  }, [conversation, profile]);
+  }, [conversation, signedUrl]);
 
   useImperativeHandle(ref, () => ({ start: () => void start() }), [start]);
 
