@@ -38,6 +38,8 @@ export type BrailleState = {
   demoRunning: boolean;
   /** True when the demo is holding a dot and waiting for the learner to confirm they feel it. */
   demoAwaitingConfirm: boolean;
+  /** True when a live teaching step is waiting for learner confirmation. */
+  teachAwaitingConfirm: boolean;
 };
 
 const INITIAL: BrailleState = {
@@ -57,6 +59,7 @@ const INITIAL: BrailleState = {
   demoCaption: null,
   demoRunning: false,
   demoAwaitingConfirm: false,
+  teachAwaitingConfirm: false,
 };
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -66,6 +69,7 @@ class BrailleController {
   private state: BrailleState = INITIAL;
   private listeners = new Set<() => void>();
   private pendingIdentify: ((name: string) => void) | null = null;
+  private feelResolve: (() => void) | null = null;
 
   private ensureVisibleCell(): void {
     if (!this.state.connected && !this.state.simulated) {
@@ -205,17 +209,26 @@ class BrailleController {
     this.ensureVisibleCell();
 
     const holdMs = Math.max(0.3, Math.min(seconds || 2, 15)) * 1000; // clamp 0.3–15 s
-    this.set({ busy: true, currentCell: bits, currentLabel: ch.toUpperCase() });
+    const isSingleLetter = (character ?? "").trim().length === 1;
+    this.set({
+      busy: true,
+      currentCell: bits,
+      currentLabel: ch.toUpperCase(),
+      teachAwaitingConfirm: isSingleLetter,
+    });
     try {
       // Physical device gets the serial frames; in no-hardware mode the on-screen
       // cell (which mirrors this state) is the device, so we just animate + hold.
       if (this.transport) await this.transport.send(`B${bits}`);
       await delay(holdMs);
+      if (isSingleLetter) {
+        await this.waitForFeel();
+      }
       if (this.transport) await this.transport.send("Z");
-      this.set({ currentCell: CELL_DOWN, currentLabel: null, busy: false });
+      this.set({ currentCell: CELL_DOWN, currentLabel: null, busy: false, teachAwaitingConfirm: false });
       return `Showed "${ch.toUpperCase()}" for ${Math.round(holdMs / 1000)} seconds.`;
     } catch (e) {
-      this.set({ busy: false });
+      this.set({ busy: false, teachAwaitingConfirm: false });
       return `The cell isn't responding: ${e instanceof Error ? e.message : "unknown error"}.`;
     }
   }
@@ -256,19 +269,9 @@ class BrailleController {
   // --- interactive demo: hold a dot, ask "can you feel it?", wait for the learner ---
   private demoResolve: (() => void) | null = null;
 
-  private waitForFeel(): Promise<void> {
-    this.set({ demoAwaitingConfirm: true });
-    return new Promise<void>((resolve) => {
-      this.demoResolve = () => {
-        this.demoResolve = null;
-        this.set({ demoAwaitingConfirm: false });
-        resolve();
-      };
-    });
-  }
-
   /** Learner tapped "I can feel it" (or said yes). Advances the interactive demo. */
   confirmFeel(): void {
+    this.feelResolve?.();
     this.demoResolve?.();
   }
 
@@ -323,7 +326,8 @@ class BrailleController {
       await delay(3000);
     } finally {
       this.demoResolve = null;
-      this.set({ demoRunning: false, demoCaption: null, demoAwaitingConfirm: false });
+      this.feelResolve = null;
+      this.set({ demoRunning: false, demoCaption: null, demoAwaitingConfirm: false, teachAwaitingConfirm: false });
       await this.clear();
     }
   }
@@ -347,6 +351,17 @@ class BrailleController {
     } catch {
       return false;
     }
+  }
+
+  /** Wait until the learner confirms they can feel the current letter. */
+  waitForFeel(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const original = this.demoResolve;
+      this.demoResolve = () => {
+        original?.();
+        resolve();
+      };
+    });
   }
 
   /** Drop every dot and clear the label. */

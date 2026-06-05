@@ -11,7 +11,14 @@ import { lessonByLevel, lettersThroughLevel, MAX_LEVEL } from "@/lib/curriculum"
 // RIGHT pane: the cell simulation. Big cell mirrors the device; a word strip shows the
 // current word with the active letter highlighted; a level bar shows progress.
 export default function LessonStage() {
-  const { currentWord, wordIndex, demoCaption, demoRunning, demoAwaitingConfirm } = useBrailleState();
+  const {
+    currentWord,
+    wordIndex,
+    demoCaption,
+    demoRunning,
+    demoAwaitingConfirm,
+    teachAwaitingConfirm,
+  } = useBrailleState();
   const profile = useProfile();
   const lesson = lessonByLevel(profile.level);
   const cells = currentWord ? textToCells(currentWord) : [];
@@ -53,7 +60,7 @@ export default function LessonStage() {
         <BrailleCell />
 
         {/* interactive confirm — the demo waits here until the learner feels the dots */}
-        {demoAwaitingConfirm && (
+        {(demoAwaitingConfirm || teachAwaitingConfirm) && (
           <button
             onClick={() => controller.confirmFeel()}
             className="btn3d btn-green animate-bounceIn text-base"
