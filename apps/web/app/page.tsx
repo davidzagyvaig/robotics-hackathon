@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { ConversationProvider } from "@elevenlabs/react";
 import Conversation, { type ConversationHandle } from "@/components/Conversation";
 import LessonStage from "@/components/LessonStage";
-import Quiz from "@/components/Quiz";
-import { controller } from "@/lib/controller";
+import { controller, useBrailleState } from "@/lib/controller";
 import { useProfile } from "@/lib/progress";
 
 function DotMark() {
@@ -43,7 +42,7 @@ function TopStats() {
 }
 
 export default function Page() {
-  const [mode, setMode] = useState<"learn" | "quiz">("learn");
+  const { mode } = useBrailleState(); // source of truth shared with the voice agent
   const convRef = useRef<ConversationHandle>(null);
 
   // The device is just motors (pins up/down) with no sensors — so the on-screen cell IS
@@ -96,7 +95,7 @@ export default function Page() {
                 {(["learn", "quiz"] as const).map((m) => (
                   <button
                     key={m}
-                    onClick={() => setMode(m)}
+                    onClick={() => controller.setMode(m)}
                     className={`rounded-full px-4 py-1 text-xs font-extrabold uppercase tracking-wide transition ${
                       mode === m ? "bg-green text-white" : "text-hare hover:text-eel"
                     }`}
@@ -106,7 +105,9 @@ export default function Page() {
                 ))}
               </div>
             </div>
-            <div className="min-h-0 flex-1">{mode === "learn" ? <LessonStage /> : <Quiz />}</div>
+            <div className="min-h-0 flex-1">
+              <LessonStage quiz={mode === "quiz"} />
+            </div>
           </section>
         </div>
       </main>

@@ -18,7 +18,9 @@ export async function GET() {
   try {
     const res = await fetch(
       `https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=${agentId}`,
-      { headers: { "xi-api-key": apiKey } }
+      // cache: "no-store" is CRITICAL — Next.js caches fetch() in route handlers by default,
+      // so without it the route replays the SAME (now-expired) token on every request.
+      { headers: { "xi-api-key": apiKey }, cache: "no-store" }
     );
     if (!res.ok) {
       const detail = await res.text();

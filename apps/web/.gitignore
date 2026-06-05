@@ -7,3 +7,6 @@ next-env.d.ts.bak
 
 # local Postgres (PGlite) data — schema is recreated from code on first run
 .data/
+
+# local debug session logs
+.debug/

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardR
 import { useConversation } from "@elevenlabs/react";
 import { controller } from "@/lib/controller";
 import { progress, useProfile } from "@/lib/progress";
+import { debugLog, debugReset } from "@/lib/debug";
 
 // The LEFT pane: the voice tutor (and the brain of hands-free "disability mode"). Tools:
 // identify_learner (voice identity → local Postgres), render_braille, render_word. A live
@@ -11,6 +12,7 @@ import { progress, useProfile } from "@/lib/progress";
 
 const clientTools = {
   identify_learner: async (p: { name: string }) => {
+    debugLog("tool:identify_learner", { name: p.name });
     const r = await progress.identify(p.name);
     // Always onboard from the beginning this session; this tool only saves their progress.
     return `Saved. Greet ${r.name} warmly by name, then begin teaching from the very start with the letter A.`;
@@ -20,15 +22,39 @@ const clientTools = {
   // works no matter how the dashboard tool is defined.
   render_braille: async (p: { text?: string; character?: string; word?: string; seconds?: number }) => {
     const text = (p.text ?? p.character ?? p.word ?? "").trim();
+    debugLog("tool:render_braille", { raw: p, resolved: text || "(empty)" });
     if (!text) return "No text was given to show.";
-    return [...text].length <= 1
-      ? controller.renderBraille(text, p.seconds ?? 4)
-      : controller.renderWord(text, 1.5);
+    if ([...text].length <= 1) return controller.renderBraille(text, p.seconds ?? 4);
+    // Multi-letter word: step it in the BACKGROUND and return immediately. Awaiting the full
+    // animation (~7s for a 4-letter word) blows the tool's 3s response timeout, which made the
+    // agent think the cell failed ("cell is having trouble") and retry, stacking animations.
+    void controller.renderWord(text, 1.6);
+    return `The cell is now spelling "${text}" one letter at a time.`;
   },
   // alias kept for compatibility if a render_word tool is ever configured
   render_word: async (p: { word?: string; text?: string; seconds_per_letter?: number }) =>
     controller.renderWord(p.word ?? p.text ?? "", p.seconds_per_letter ?? 1.5),
+  // Flip the right pane between teaching and quizzing so the screen follows the lesson.
+  // In "quiz" the cell hides the letter so it's a real test; "learn" reveals it again.
+  set_mode: async (p: { mode?: string }) => {
+    const mode = (p.mode ?? "").toLowerCase().includes("quiz") ? "quiz" : "learn";
+    debugLog("tool:set_mode", { raw: p, resolved: mode });
+    controller.setMode(mode);
+    return `The screen is now in ${mode} mode.`;
+  },
 };
+
+// Safety net for Qwen's flaky tool-calling: when Dot's SPEECH clearly names the letter she's
+// teaching ("That's A — dot one", "the letter B", "let's try C"), mirror it onto the cell so the
+// cell never lags her voice — even if she forgot to call render_braille. Single-letter match only,
+// so "that's great" / "you're a natural" don't trigger it. Used in LEARN mode only (in QUIZ she
+// never names the answer, so there's nothing to mirror and nothing gets revealed).
+function taughtLetter(text: string): string | null {
+  const m = text.match(
+    /\b(?:that'?s|this is|here'?s|the letter|let'?s (?:try|meet|move on to))\s+(?:the letter\s+)?([a-z])\b/i
+  );
+  return m ? m[1].toLowerCase() : null;
+}
 
 type Line = { id: number; role: "user" | "ai"; text: string };
 export type ConversationHandle = { start: () => void };
@@ -38,18 +64,69 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<Line[]>([]);
   const [launchState, setLaunchState] = useState<"idle" | "opening" | "live">("idle");
-  const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const [micBars, setMicBars] = useState<number[]>(Array.from({ length: 12 }, () => 0.12));
   const idRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // --- auto-reconnect / error recovery ---
+  const endedByUserRef = useRef(false); // true only when the learner taps "End session"
+  const reconnectRef = useRef(0); // consecutive auto-reconnect attempts
+  const startRef = useRef<() => Promise<void>>(); // latest connect fn, for reconnect from callbacks
+  const MAX_RECONNECTS = 4;
 
   const conversation = useConversation({
     clientTools,
-    onError: (m: string) => setError(m),
+    onConnect: (info: unknown) => {
+      debugLog("conn:CONNECTED", { info });
+      reconnectRef.current = 0; // a good connection clears the retry budget
+      setError(null);
+    },
+    onDisconnect: (info: unknown) => {
+      debugLog("conn:disconnected", { info });
+      // If the learner ended it, stay ended. Otherwise it dropped — try to come back.
+      if (endedByUserRef.current) {
+        endedByUserRef.current = false;
+        return;
+      }
+      if (reconnectRef.current < MAX_RECONNECTS) {
+        reconnectRef.current += 1;
+        debugLog("conn:auto-reconnect", { attempt: reconnectRef.current });
+        setError(`Reconnecting… (${reconnectRef.current})`);
+        setLaunchState("opening");
+        setTimeout(() => void startRef.current?.(), 700);
+      } else {
+        debugLog("conn:gave-up");
+        setLaunchState("idle");
+        setError("Connection lost. Tap Start to resume — your progress is saved.");
+      }
+    },
+    onStatusChange: (s: unknown) => debugLog("conn:status", { s }),
+    onModeChange: (m: unknown) => debugLog("conn:mode", { m }),
+    onError: (m: string) => {
+      debugLog("conn:ERROR", { message: m });
+      // Surface it, but let onDisconnect drive the actual reconnect so we don't double-fire.
+      setError(typeof m === "string" && m ? m : "Something hiccuped — trying to recover…");
+    },
     onMessage: (msg: { message: string; source: string }) => {
       if (!msg?.message) return;
-      idRef.current += 1;
       const role: "user" | "ai" = msg.source === "user" ? "user" : "ai";
+      // The key latency signal: timestamp of every USER utterance and every DOT reply.
+      // The gap between a "user" line and the next "ai" line = response latency.
+      debugLog(role === "user" ? "speech:USER" : "speech:DOT", { text: msg.message });
+
+      // Safety net: mirror the letter Dot names onto the cell (LEARN mode only) so a missed
+      // render_braille call never leaves the cell blank while she describes a letter.
+      if (role === "ai") {
+        const snap = controller.getSnapshot();
+        if (snap.mode === "learn") {
+          const L = taughtLetter(msg.message);
+          if (L && L.toUpperCase() !== snap.currentLabel) {
+            void controller.renderBraille(L);
+            debugLog("safetynet:render", { letter: L });
+          }
+        }
+      }
+
+      idRef.current += 1;
       setTranscript((t) => [...t, { id: idRef.current, role, text: msg.message }].slice(-40));
     },
   });
@@ -74,7 +151,9 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
     } catch {
       /* no setVolume */
     }
-  }, [profile.voiceEnabled, status, conversation]);
+    // `conversation` is a fresh object every render — depending on it would loop forever.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.voiceEnabled, status]);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [transcript]);
@@ -115,63 +194,85 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
       alive = false;
       window.cancelAnimationFrame(frame);
     };
-  }, [active, conversation, phase]);
+    // NOTE: `conversation` is intentionally NOT a dep — its reference changes every render,
+    // which re-triggered this effect → setMicBars → render → ∞ ("Maximum update depth").
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, phase]);
 
-  // Warm a signed URL (WebSocket) so Start is instant. WebSocket reliably streams the
-  // mic upstream + returns transcripts in this SDK; audio quality is handled agent-side
-  // (44.1kHz / turbo_v2) and turn-taking is "patient" so it won't cut the learner off.
-  useEffect(() => {
-    let alive = true;
-    const warm = async () => {
-      try {
-        const res = await fetch("/api/get-signed-url");
-        const data = await res.json();
-        if (alive && res.ok && data.signedUrl) setSignedUrl(data.signedUrl);
-      } catch {
-        if (alive) setSignedUrl(null);
-      }
-    };
-    void warm();
-    return () => {
-      alive = false;
-    };
-  }, []);
+  // NOTE: WebRTC conversation tokens are short-lived (they expire within ~a minute), so we
+  // do NOT pre-warm one — a warmed token is already expired by the time Start is clicked
+  // ("token is expired"). We mint a fresh token inside start() at click time instead.
 
-  const start = useCallback(async () => {
+  // `fresh` = a user-initiated Start (clears transcript, resets the retry budget). An
+  // auto-reconnect passes fresh=false so it keeps the transcript and the retry counter.
+  const start = useCallback(async (fresh = true) => {
     setError(null);
-    setTranscript([]); // fresh conversation each time you start
     setLaunchState("opening");
+    if (fresh) {
+      endedByUserRef.current = false;
+      reconnectRef.current = 0;
+      setTranscript([]); // fresh conversation each time YOU start
+      debugReset();
+      debugLog("session:start-clicked");
+    } else {
+      debugLog("session:reconnecting");
+    }
+    const dynamicVariables = {
+      user_name: "unknown",
+      is_returning: "no",
+      level: "1",
+      lesson_title: "First five",
+      known_letters: "none yet",
+    };
     try {
       controller.connectSimulated();
       await controller.clear();
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      const url =
-        signedUrl ??
-        (await (async () => {
-          const res = await fetch("/api/get-signed-url");
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error ?? "Failed to get a signed URL");
-          return data.signedUrl as string;
-        })());
-      conversation.startSession({
-        signedUrl: url,
-        connectionType: "websocket",
-        clientTools,
-        dynamicVariables: {
-          user_name: "unknown",
-          is_returning: "no",
-          level: "1",
-          lesson_title: "First five",
-          known_letters: "none yet",
-        },
-      });
-    } catch (e) {
-      setLaunchState("idle");
-      setError(e instanceof Error ? e.message : "Could not start the conversation.");
-    }
-  }, [conversation, signedUrl]);
 
-  useImperativeHandle(ref, () => ({ start: () => void start() }), [start]);
+      // Primary path: WebRTC (the same low-latency transport as the ElevenLabs preview).
+      // `cache: "no-store"` is CRITICAL — without it the browser replays a cached (expired)
+      // token response on every click ("token is expired"), never hitting the server.
+      const res = await fetch("/api/get-conversation-token", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to get a conversation token");
+      debugLog("transport:webrtc-starting");
+      const id = await conversation.startSession({
+        conversationToken: data.token as string,
+        connectionType: "webrtc",
+        clientTools,
+        dynamicVariables,
+      });
+      debugLog("transport:webrtc-OK", { conversationId: id });
+    } catch (webrtcError) {
+      debugLog("transport:webrtc-FAILED", {
+        error: webrtcError instanceof Error ? webrtcError.message : String(webrtcError),
+      });
+      // Fallback: WebSocket (signed URL) if WebRTC can't be reached (e.g. UDP blocked).
+      try {
+        const res = await fetch("/api/get-signed-url", { cache: "no-store" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Failed to get a signed URL");
+        debugLog("transport:websocket-FALLBACK-starting");
+        await conversation.startSession({
+          signedUrl: data.signedUrl as string,
+          connectionType: "websocket",
+          clientTools,
+          dynamicVariables,
+        });
+        debugLog("transport:websocket-FALLBACK-OK");
+      } catch {
+        setLaunchState("idle");
+        setError(
+          webrtcError instanceof Error ? webrtcError.message : "Could not start the conversation."
+        );
+      }
+    }
+  }, [conversation]);
+
+  // Keep a live ref so onDisconnect can reconnect (auto-reconnect keeps the transcript).
+  startRef.current = () => start(false);
+
+  useImperativeHandle(ref, () => ({ start: () => void start(true) }), [start]);
 
   return (
     <div className="flex h-full flex-col">
@@ -264,11 +365,18 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
 
       <div className="border-t-2 border-swan px-5 py-4">
         {!active ? (
-          <button onClick={() => void start()} className="btn3d btn-green w-full text-base">
+          <button onClick={() => void start(true)} className="btn3d btn-green w-full text-base">
             Start lesson
           </button>
         ) : (
-          <button onClick={() => conversation.endSession()} className="btn-white w-full px-6 py-3">
+          <button
+            onClick={() => {
+              endedByUserRef.current = true; // intentional end → do NOT auto-reconnect
+              reconnectRef.current = 0;
+              void conversation.endSession();
+            }}
+            className="btn-white w-full px-6 py-3"
+          >
             End session
           </button>
         )}

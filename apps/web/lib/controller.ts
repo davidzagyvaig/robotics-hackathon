@@ -40,6 +40,9 @@ export type BrailleState = {
   demoAwaitingConfirm: boolean;
   /** True when a live teaching step is waiting for learner confirmation. */
   teachAwaitingConfirm: boolean;
+  /** Which pane the cell is in. The voice agent flips this via set_mode so the screen
+   *  follows the lesson: "learn" shows the letter; "quiz" hides it (the learner guesses). */
+  mode: "learn" | "quiz";
 };
 
 const INITIAL: BrailleState = {
@@ -60,6 +63,7 @@ const INITIAL: BrailleState = {
   demoRunning: false,
   demoAwaitingConfirm: false,
   teachAwaitingConfirm: false,
+  mode: "learn",
 };
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -68,6 +72,7 @@ class BrailleController {
   private transport: Transport | null = null;
   private state: BrailleState = INITIAL;
   private listeners = new Set<() => void>();
+  private wordGen = 0; // bumped on each renderWord so a newer call supersedes an in-flight one
   private pendingIdentify: ((name: string) => void) | null = null;
   private feelResolve: (() => void) | null = null;
 
@@ -208,6 +213,7 @@ class BrailleController {
 
     // The on-screen cell IS the device when no hardware is connected — always works.
     this.ensureVisibleCell();
+    this.wordGen += 1; // stop any looping word so this single letter takes over the cell
 
     // Raise the letter and KEEP it up so the learner can feel it while you ask, by VOICE,
     // "can you feel it?". Return immediately — never block the tool call (that caused the
@@ -245,21 +251,30 @@ class BrailleController {
 
     const holdMs = Math.max(0.3, Math.min(secondsPerLetter || 1.5, 8)) * 1000;
     const gapMs = 320; // dots-down pause between letters so each is felt as separate
+    const loopPauseMs = 1300; // calm pause between repeats while the word keeps showing
+    const gen = ++this.wordGen; // claim this run; any newer cell update supersedes it
     this.set({ busy: true, currentWord: clean, wordIndex: -1 });
     try {
-      for (let i = 0; i < cells.length; i++) {
-        const cell = cells[i];
-        this.set({ currentCell: cell.bits, currentLabel: cell.label, wordIndex: i });
-        if (this.transport) await this.transport.send(`B${cell.bits}`);
-        await delay(holdMs);
-        this.set({ currentCell: CELL_DOWN, currentLabel: null });
-        if (this.transport) await this.transport.send("Z");
-        if (i < cells.length - 1) await delay(gapMs);
+      // Keep showing the word — step C-A-R, pause, repeat — until something else supersedes
+      // it (a new letter/word, a quiz, or clear). It never silently blanks to "now learning".
+      while (gen === this.wordGen) {
+        for (let i = 0; i < cells.length; i++) {
+          if (gen !== this.wordGen) return "Superseded by a newer cell update.";
+          const cell = cells[i];
+          this.set({ currentCell: cell.bits, currentLabel: cell.label, wordIndex: i });
+          if (this.transport) await this.transport.send(`B${cell.bits}`);
+          await delay(holdMs);
+          if (gen !== this.wordGen) return "Superseded by a newer cell update.";
+          this.set({ currentCell: CELL_DOWN, currentLabel: null });
+          if (this.transport) await this.transport.send("Z");
+          if (i < cells.length - 1) await delay(gapMs);
+        }
+        if (gen !== this.wordGen) return "Superseded by a newer cell update.";
+        await delay(loopPauseMs); // word strip stays on screen during the pause, then repeats
       }
-      this.set({ busy: false, currentWord: null, wordIndex: -1 });
-      return `Showed the word "${clean}" — ${cells.length} cells.`;
+      return `Showing the word "${clean}".`;
     } catch (e) {
-      this.set({ busy: false, currentWord: null, wordIndex: -1 });
+      if (gen === this.wordGen) this.set({ busy: false, currentWord: null, wordIndex: -1 });
       return `The cell isn't responding: ${e instanceof Error ? e.message : "unknown error"}.`;
     }
   }
@@ -337,7 +352,8 @@ class BrailleController {
     if (!ch) return false;
     const bits = charToBits(ch);
     if (!bits) return false;
-    this.set({ currentCell: bits, currentLabel: ch.toUpperCase() });
+    this.wordGen += 1; // stop any looping word
+    this.set({ currentCell: bits, currentLabel: ch.toUpperCase(), currentWord: null, wordIndex: -1 });
     try {
       if (this.transport) await this.transport.send(`B${bits}`);
       return true;
@@ -357,9 +373,16 @@ class BrailleController {
     });
   }
 
+  /** Flip the cell pane between teaching (label visible) and quizzing (label hidden).
+   *  Called by the agent's set_mode tool and by the manual LEARN/QUIZ toggle. */
+  setMode(mode: "learn" | "quiz"): void {
+    this.set({ mode });
+  }
+
   /** Drop every dot and clear the label. */
   async clear(): Promise<void> {
-    this.set({ currentCell: CELL_DOWN, currentLabel: null });
+    this.wordGen += 1; // stop any looping word
+    this.set({ currentCell: CELL_DOWN, currentLabel: null, currentWord: null, wordIndex: -1, busy: false });
     try {
       if (this.transport) await this.transport.send("Z");
     } catch {

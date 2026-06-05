@@ -20,7 +20,8 @@ export async function GET() {
   try {
     const res = await fetch(
       `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${agentId}`,
-      { headers: { "xi-api-key": apiKey } }
+      // no-store: signed URLs/tokens are short-lived; never let Next.js cache the fetch.
+      { headers: { "xi-api-key": apiKey }, cache: "no-store" }
     );
     if (!res.ok) {
       const detail = await res.text();

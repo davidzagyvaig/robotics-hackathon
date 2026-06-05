@@ -11,10 +11,27 @@ const GRID: number[] = [0, 3, 1, 4, 2, 5];
 // warm saffron/amber raised dots on beige
 const RAISED =
   "radial-gradient(circle at 38% 30%, #F6C879 0%, #E0962A 52%, #B9711A 100%)";
+// teal accent for the dots a letter ADDS on top of its base decade — makes the rule visible:
+// k–t = a–j + dot 3; u–z = a–e + dots 3 & 6; w (the exception) = j + dot 6.
+const RAISED_ADDED =
+  "radial-gradient(circle at 38% 30%, #7FD8EC 0%, #2E9FC4 52%, #1C6E8C 100%)";
+
+// Which dot indices (0..5 = dots 1..6) a letter adds beyond its base decade. Empty for a–j.
+function addedDots(letter: string | null): Set<number> {
+  const c = (letter ?? "").toLowerCase();
+  if (c.length !== 1) return new Set();
+  if ("klmnopqrst".includes(c)) return new Set([2]); // + dot 3
+  if ("uvxyz".includes(c)) return new Set([2, 5]); // + dots 3 & 6
+  if (c === "w") return new Set([5]); // the exception: j + dot 6
+  return new Set();
+}
 
 export default function BrailleCell({ hideLabel = false }: { hideLabel?: boolean }) {
   const { currentCell, currentLabel, busy } = useBrailleState();
   const label = hideLabel ? null : currentLabel;
+  // Highlight the "added" dots in teal so the decade rule is visible. Suppressed during a
+  // quiz (hideLabel) — colored dots would hint at which letter it is.
+  const added = hideLabel ? new Set<number>() : addedDots(currentLabel);
 
   return (
     <div className="flex flex-col items-center gap-5">
@@ -29,12 +46,16 @@ export default function BrailleCell({ hideLabel = false }: { hideLabel?: boolean
           <div className="grid grid-cols-2 gap-x-9 gap-y-6">
             {GRID.map((dotIndex, i) => {
               const up = currentCell[dotIndex] === "1";
+              const isAdded = added.has(dotIndex);
               return up ? (
                 <span
                   key={`${i}-up-${currentLabel ?? ""}`}
-                  aria-label={`dot ${dotIndex + 1} raised`}
+                  aria-label={`dot ${dotIndex + 1} raised${isAdded ? " (added by the rule)" : ""}`}
                   className="h-14 w-14 animate-pop rounded-full"
-                  style={{ background: RAISED, boxShadow: "0 5px 0 #9c5e12" }}
+                  style={{
+                    background: isAdded ? RAISED_ADDED : RAISED,
+                    boxShadow: isAdded ? "0 5px 0 #155A73" : "0 5px 0 #9c5e12",
+                  }}
                 />
               ) : (
                 <span

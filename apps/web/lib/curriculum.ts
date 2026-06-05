@@ -87,3 +87,10 @@ export function lettersThroughLevel(level: number): string[] {
 export function lessonByLevel(level: number): Lesson | undefined {
   return LESSONS.find((l) => l.level === level);
 }
+
+/** Which level teaches a given letter (1–4). Falls back to the last letter-level. */
+export function levelForLetter(ch: string): number {
+  const c = (ch ?? "").trim().toLowerCase();
+  const lesson = LESSONS.find((l) => l.letters?.includes(c));
+  return lesson?.level ?? 4;
+}
