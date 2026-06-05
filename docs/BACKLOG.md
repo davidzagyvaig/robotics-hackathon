@@ -6,14 +6,21 @@ teaching box: connect, talk to the tutor, feel the dots). Nothing here is lost �
 The firmware already exposes hooks for several of these (`TOUCH 1/2`, `SW 0/1`, `CON/COFF`, `POT/SPEED/CHARMS`),
 so most are web/agent-side work.
 
-## Product / UX
-- **Frontend redesign.** A more polished, branded UI; better onboarding; accessibility pass (screen-reader
-  labels, focus order, large-text/high-contrast).
-- **No-hardware web mode.** Let someone converse with the tutor and see the dot combinations **on-screen**
-  with no ESP connected (a software braille cell). Makes the public link useful without the box and
-  de-risks demos. *(We chose hardware-only for now.)*
-- **Switch as a real mode.** Use the toggle (`SW 0/1`) for **Learn vs Practice/Quiz** — the box shows a
-  random letter, the learner guesses, the tutor checks. (Today the switch is read + reported but unused.)
+## Shipped (was backlog)
+- ✅ **Frontend redesign** — warm editorial two-pane UI (tutor | cell), Fraunces/Hanken type, tactile dots.
+- ✅ **No-hardware web mode** — the on-screen cell is a real software model; the full tutor runs with no
+  device. Public-link-friendly and de-risks the demo / is the video B-roll source.
+- ✅ **render_word** — agent steps a whole word across the cell, highlighting each letter on the strip.
+- ✅ **Adaptive curriculum + progress** — decade-based levels (`lib/curriculum.ts`) + local profile that
+  remembers name/level/streak/mastered (`lib/progress.ts`). Voice toggle for sighted learners.
+
+## Product / UX (still open)
+- **Quiz / Practice mode.** Use the toggle (`SW 0/1`) or a UI switch for **Learn vs Quiz** — the box shows a
+  random letter, the learner guesses, the tutor checks. (Switch is read + reported but unused.)
+- **Backend progress sync.** Today progress is localStorage only; add accounts so it follows the learner
+  across devices (swap `lib/progress.ts` load/save for an API).
+- **Deeper accessibility pass.** Full screen-reader labelling of the live cell state, focus order, a
+  high-contrast/large-text theme toggle.
 
 ## Notifications (a separate "connected" product)
 - **Notification mode.** Single tap (`TOUCH 1`) = read the latest notification aloud; double tap (`TOUCH 2`)

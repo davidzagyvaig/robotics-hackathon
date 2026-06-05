@@ -8,13 +8,22 @@ so anyone on the team can reproduce it. The agent runs in the browser via `@elev
 
 1. **Create the agent.** ElevenLabs dashboard → **Agents** (Conversational AI) → *Create agent*.
 2. **System prompt.** Paste the contents of [`prompt.md`](./prompt.md).
-3. **Voice.** Pick any voice you like (a calm, clear one works best for teaching).
-4. **Add the client tool.** Agent → **Tools** → *Add tool* → type **Client**, and fill it in to
-   match [`tools.json`](./tools.json):
-   - **Name:** `render_braille`  ← must be exact, it's case-sensitive
-   - **Description:** (from `tools.json`)
-   - **Parameters:** `character` (string, required) and `seconds` (number, required)
-   - Enable **"Wait for response"** so the agent hears the confirmation string back.
+3. **Voice.** Pick a **warm, calm, patient, clear** voice — a tutor people want to keep using.
+   Audition the *calm* / *reassuring* / *language-tutor* / *educational* categories in the ElevenLabs
+   voice library (e.g. a warm female like *Matilda* or *Sarah*, or a calm male like *Henry*). Set the
+   model to a low-latency one (**`eleven_turbo_v2_5`** or **`eleven_flash_v2_5`**) so replies feel
+   instant. See `docs/PEDAGOGY.md` for the rationale. The learner can mute the voice in the app
+   (sighted learners read the captions instead), so clarity of wording matters as much as the voice.
+4. **Add BOTH client tools.** Agent → **Tools** → *Add tool* → type **Client**, once per tool, matching
+   [`tools.json`](./tools.json):
+   - **`render_braille`** — params `character` (string, required), `seconds` (number, required).
+   - **`render_word`** — params `word` (string, required), `seconds_per_letter` (number, required).
+   - Names are **case-sensitive** and must match `apps/web/components/Conversation.tsx`.
+   - Enable **"Wait for response"** on both so the agent hears the confirmation string back.
+5. **Dynamic variables.** The web app sends `user_name`, `level`, `lesson_title`, `known_letters` at
+   session start; the prompt reads them as `{{var}}`. No dashboard config needed beyond using them in
+   the prompt (already done) — but if the dashboard requires declaring them, add those four as text
+   dynamic variables.
 5. **Auth.** Keep the agent **private**: enable "Require authentication" in the agent's
    Security settings, and (defense in depth) add your Vercel domain + `localhost` to the
    **hostname allowlist**. The web app's `/api/get-signed-url` route mints signed URLs

@@ -1,7 +1,15 @@
 # Architecture
 
-BrailleBuddy is a voice-guided braille teaching box. A learner opens the web app, connects the device
-(USB or Bluetooth), talks to a voice tutor, and feels the six dots of one braille cell rise and fall.
+BrailleBuddy is a voice-guided braille tutor ("Duolingo for braille"). A learner opens the web app — a
+two-pane layout, **tutor on the left, the cell on the right** — talks to the voice tutor, and feels or
+watches the six dots of one braille cell rise and fall. It runs with **no hardware** (an on-screen cell
+that's a real software model of the device) and, when an ESP32 cell is connected over USB or Bluetooth,
+the *same* code drives the physical dots. The tutor is adaptive (level + saved progress) and the voice
+is optional (mute → read captions). Teaching method: [`PEDAGOGY.md`](./PEDAGOGY.md).
+
+Two browser client tools: `render_braille(character, seconds)` shows one letter; `render_word(word,
+seconds_per_letter)` steps a word across the cell and highlights each letter on the on-screen strip.
+Curriculum lives in `lib/curriculum.ts`, learner progress in `lib/progress.ts` (localStorage).
 
 ## Data flow
 

@@ -2,37 +2,66 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color-scheme: light;
+}
+
 html,
 body {
-  background: #0a0e14;
-  color: #e6edf3;
   margin: 0;
-  height: 100%;
+  min-height: 100%;
+  background-color: #f4eee1;
+  color: #211a15;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 * {
   box-sizing: border-box;
 }
 
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* Warm paper atmosphere: a soft radial warmth + a faint film grain over everything. */
+.paper-bg {
+  position: relative;
+  background-color: #f4eee1;
+  background-image:
+    radial-gradient(120% 90% at 50% -10%, rgba(224, 150, 42, 0.14), transparent 60%),
+    radial-gradient(80% 70% at 85% 110%, rgba(182, 85, 47, 0.08), transparent 55%);
 }
-::-webkit-scrollbar-thumb {
-  background: #222c3a;
-  border-radius: 4px;
+.grain::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-@keyframes pulse-flag {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
+::selection {
+  background: rgba(224, 150, 42, 0.28);
 }
-.pulse-flag {
-  animation: pulse-flag 1.4s ease-in-out infinite;
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  background: #dccfb8;
+  border-radius: 5px;
+}
+
+/* numerals + small caps feel for the technical labels */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

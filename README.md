@@ -1,41 +1,58 @@
 # BrailleBuddy ⠃
 
-**A voice-guided braille teaching box.** Plug the device into your laptop, open the website, and
-talk to a friendly voice tutor — as it teaches, six servo-driven dots rise and fall under your
-fingers so you can *feel* each letter.
+**Duolingo for braille — a voice-guided tutor with a tactile cell.** Open the website, talk to a
+patient voice tutor, and *feel* (or watch) six dots rise and fall to form each letter. It works with
+**no hardware at all** (an on-screen cell), and the *same* app drives a real ESP32 braille cell over
+USB or Bluetooth when one is connected.
 
 Built at the 2nd Hungarian Robotics Hackathon @ Formlabs Budapest (June 2026) by **Team Nexus**.
 
-> Open the site in Chrome → connect over **USB or Bluetooth** → start talking. Say *"teach me the
-> letter C"* and the top two dots rise; the tutor holds each letter long enough to read.
+> Two panes: **your tutor** on the left, **the cell** on the right. Say *"teach me the letter C"* and
+> the top two dots rise while the right pane shows C. Ask to *"read the word cat"* and it steps C-A-T
+> across the cell. Mute the voice and read captions, or close your eyes and feel the dots — both work.
+
+For blind learners *and* sighted people learning braille. Voice is optional (toggle it off and read
+captions). The tutor is **adaptive**: a placement check picks your level, and the app remembers where
+you left off.
 
 ---
 
 ## How it works
 
 ```
- you speak ─► ElevenLabs voice agent ─► render_braille("C", 3)  (runs in YOUR browser)
-                                              │  look up "C" → 100100
-        feel the dots ◄── 6 servos ◄── ESP32-S3 ◄──(USB or Bluetooth)── browser
-                                              │
-                              haptic buzz on each new letter
+ you speak ─► ElevenLabs voice agent ─► render_braille("C", 3) / render_word("cat", 1.5)
+                                              │   (CLIENT tools — run in YOUR browser)
+                                              │   look up letters → dot patterns (braille.ts)
+   feel / see the dots ◄── on-screen cell  ◄──┤
+                       ◄── 6 servos ◄ ESP32-S3 ◄──(USB / Bluetooth)── browser
+                                              │   haptic buzz on each new letter (hardware)
 ```
 
-The agent has **one tool**, `render_braille(character, seconds)`. It runs as an ElevenLabs *client
-tool* — in the browser, not on a server — because the device is connected to *your* machine and only
-the browser can reach it over **USB (WebSerial)** or **Bluetooth (Web Bluetooth)**. The browser looks the
-letter up in a braille dictionary, raises the 6 dots on the ESP32-S3, holds them for `seconds`, then
-clears — the agent sets the pace. The only server code is one route that mints a signed URL so the API key
-stays secret. Full write-up: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+The agent has **two client tools** — `render_braille(character, seconds)` and
+`render_word(word, seconds_per_letter)` — that run in the *browser* (not a server), because that's the
+only place that can reach a plugged-in device over **USB (WebSerial)** or **Bluetooth (Web Bluetooth)**.
+The browser looks letters up in a braille dictionary and drives **either** the on-screen cell (no
+hardware) **or** the real ESP32 cell — identical code path. The only server code is one route that
+mints a signed URL so the API key stays secret. Full write-up: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md);
+teaching method: [`docs/PEDAGOGY.md`](docs/PEDAGOGY.md).
+
+## Simulation-first
+The on-screen cell is a real software model of the device, not a mock — `render_braille`/`render_word`
+drive it exactly as they drive the hardware. So the whole experience (tutor → cell → word) is testable
+on any laptop with zero hardware, which is also the fallback if a servo misbehaves on demo day, and the
+clean B-roll source for the launch video.
 
 ## Monorepo layout
 
 ```
 braillebuddy/
-├── apps/web/                   Next.js app — UI, USB/BLE transport, braille logic, signed-URL route
-│   ├── app/                      page.tsx · layout · api/get-signed-url
-│   ├── components/               ConnectDevice · Conversation (ElevenLabs) · BrailleCell
-│   └── lib/                      braille.ts · transport.ts · serialTransport.ts · bleTransport.ts · controller.ts
+├── apps/web/                   Next.js app — two-pane tutor UI, USB/BLE transport, braille logic
+│   ├── app/                      page.tsx (two-pane) · layout · api/get-signed-url
+│   ├── components/               Conversation (left: agent + transcript + voice toggle) ·
+│   │                             LessonStage (right: cell + word strip + level rail) ·
+│   │                             BrailleCell · MiniCell · ConnectDevice
+│   └── lib/                      braille.ts · curriculum.ts · progress.ts · controller.ts ·
+│                                 transport.ts · serialTransport.ts · bleTransport.ts
 ├── firmware/
 │   ├── PROTOCOL.md             the one-line-of-ASCII serial contract (web ↔ device)
 │   └── braillebuddy_esp32/      PlatformIO: src/main.cpp + Wokwi sim (diagram.json)
@@ -80,11 +97,15 @@ Browser→device: `ID?`, `B<6 bits>`, `Z`, `E`, `D`, `H`. Device→browser: `BOO
 5. Turn the knob — the spelling speeds up / slows down live.
 
 ## Status
-- ✅ v2 firmware (servos + haptic + touch/switch) over USB-CDC **and** BLE, single `BrailleBuddy` identity.
-- ✅ Web: USB **and** Bluetooth transports; `render_braille(character, seconds)`; on-screen cell mirror. Builds clean.
-- ✅ ElevenLabs agent + `render_braille` client tool + signed-URL route wired.
-- 🔜 Flash real board · build the physical cell + calibrate dots · deploy to Vercel.
-- 📋 Tabled ideas (notifications, native apps, no-hardware mode, …) → [`docs/BACKLOG.md`](docs/BACKLOG.md).
+- ✅ **Two-pane app** (tutor | cell) with a warm editorial UI. Builds clean (`npm run build`).
+- ✅ **No-hardware mode** — full tutor + on-screen cell, zero device needed (simulation-first).
+- ✅ **Curriculum** (decade-based, `lib/curriculum.ts`) + **progress** (`lib/progress.ts`, "remembers you").
+- ✅ **render_braille** (letter) + **render_word** (steps a word across the cell, highlights each letter).
+- ✅ **Voice toggle** (mute → read captions) for sighted learners; live transcript.
+- ✅ v2 firmware (servos + haptic + touch) over USB-CDC **and** BLE, single `BrailleBuddy` identity.
+- ✅ ElevenLabs agent prompt + two client tools + dynamic variables + signed-URL route wired.
+- 🔜 Drop in ElevenLabs API key · flash real board + calibrate dots · deploy to Vercel.
+- 📋 Tabled ideas (notifications, native apps, quiz mode, …) → [`docs/BACKLOG.md`](docs/BACKLOG.md).
 
 ## History
 This repo began as **DermaScout** (a voice-guided 3D skin-documentation station). That project is

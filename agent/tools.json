@@ -1,22 +1,54 @@
 {
-  "_comment": "The single CLIENT tool BrailleBuddy uses. Recreate this in the ElevenLabs dashboard (Agent → Tools → Add tool → type: Client). The name MUST be exactly render_braille — matched case-sensitively to the function in apps/web/components/Conversation.tsx. Pass the LETTER itself; the web app (apps/web/lib/braille.ts) looks up the dot pattern.",
-  "type": "client",
-  "name": "render_braille",
-  "description": "Raise the pins on the single Braille cell to show ONE character, then drop them after the given time. Call once per letter you want the learner to feel. Pass the letter itself (not a dot code) — the device looks up the pattern.",
-  "expects_response": true,
-  "response_timeout_secs": 30,
-  "parameters": [
+  "_comment": "The CLIENT tools BrailleBuddy uses. Recreate BOTH in the ElevenLabs dashboard (Agent → Tools → Add tool → type: Client). Names must match apps/web/components/Conversation.tsx EXACTLY (case-sensitive). Pass the LETTER/WORD itself; the web app (apps/web/lib/braille.ts) looks up the dot patterns. Also add the four dynamic variables (user_name, level, lesson_title, known_letters) under Agent → the prompt uses them as {{var}} and the web passes them at session start.",
+  "tools": [
     {
-      "identifier": "character",
-      "type": "string",
-      "required": true,
-      "description": "The single character to show, e.g. \"R\". If more than one character is sent, only the first is used."
+      "type": "client",
+      "name": "render_braille",
+      "description": "Raise the pins on the single braille cell to show ONE character, then drop them after the given time. Use for teaching single letters. Pass the letter itself (not a dot code) — the device looks up the pattern.",
+      "expects_response": true,
+      "response_timeout_secs": 30,
+      "parameters": [
+        {
+          "identifier": "character",
+          "type": "string",
+          "required": true,
+          "description": "The single character to show, e.g. \"C\". If more than one character is sent, only the first is used."
+        },
+        {
+          "identifier": "seconds",
+          "type": "number",
+          "required": true,
+          "description": "How long the character stays raised before the pins drop. Use about 3 for teaching."
+        }
+      ]
     },
     {
-      "identifier": "seconds",
-      "type": "number",
-      "required": true,
-      "description": "How long the character stays raised before the pins drop, in seconds. Use 3 for teaching, 2 for test words."
+      "type": "client",
+      "name": "render_word",
+      "description": "Step a whole WORD across the single cell, one letter at a time, resetting between letters. The on-screen word strip highlights each letter as it shows. Use for reading words and short phrases. Pass the word itself.",
+      "expects_response": true,
+      "response_timeout_secs": 60,
+      "parameters": [
+        {
+          "identifier": "word",
+          "type": "string",
+          "required": true,
+          "description": "The word to spell out on the cell, e.g. \"cat\"."
+        },
+        {
+          "identifier": "seconds_per_letter",
+          "type": "number",
+          "required": true,
+          "description": "How long each letter stays raised, in seconds. Use about 1.5 for reading practice."
+        }
+      ]
     }
-  ]
+  ],
+  "dynamic_variables": {
+    "_comment": "Passed by the web app at session start (see Conversation.tsx). Reference in the prompt as {{name}}.",
+    "user_name": "the learner's name, or \"there\"",
+    "level": "current level number 1-6",
+    "lesson_title": "title of the current lesson",
+    "known_letters": "comma-separated letters the learner already knows"
+  }
 }
