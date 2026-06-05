@@ -81,10 +81,21 @@ class BrailleController {
     this.set({ usbSupported: isWebSerialSupported(), bleSupported: isBleSupported() });
   }
 
-  // The device streams POT/SPEED/CHARMS/TOUCH/SW at ~10 Hz; we intentionally ignore them
-  // (timing is agent-driven now). We only listen for the identity reply.
+  // The physical "assistant" button on the device taps the capacitive sensor → "TOUCH 1".
+  // We surface that as a device-button event so the app can start the voice agent
+  // (disability mode) hands-free. Other telemetry (POT/SPEED/CHARMS/SW) is ignored.
+  private deviceButtonCb: (() => void) | null = null;
+
+  onDeviceButton(cb: () => void): () => void {
+    this.deviceButtonCb = cb;
+    return () => {
+      if (this.deviceButtonCb === cb) this.deviceButtonCb = null;
+    };
+  }
+
   private handleLine = (line: string): void => {
     if (line.startsWith("BRAILLEBUDDY")) this.pendingIdentify?.(line.trim());
+    else if (line.trim() === "TOUCH 1") this.deviceButtonCb?.();
   };
 
   /**

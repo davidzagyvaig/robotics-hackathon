@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ConversationProvider } from "@elevenlabs/react";
-import Conversation from "@/components/Conversation";
+import Conversation, { type ConversationHandle } from "@/components/Conversation";
 import LessonStage from "@/components/LessonStage";
 import Quiz from "@/components/Quiz";
+import { controller } from "@/lib/controller";
 import { useProfile } from "@/lib/progress";
 import { MAX_LEVEL } from "@/lib/curriculum";
 
@@ -24,6 +25,12 @@ function ProfileChip() {
   const p = useProfile();
   return (
     <div className="flex items-center gap-3">
+      <a
+        href="/learners"
+        className="hidden font-mono text-[11px] uppercase tracking-[0.2em] text-muted transition hover:text-ink sm:inline"
+      >
+        learners
+      </a>
       <div className="hidden items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 sm:flex">
         <span className="grid h-5 w-5 place-items-center rounded-full bg-saffron/20 font-display text-[11px] font-semibold text-saffronDeep">
           {(p.name?.[0] ?? "?").toUpperCase()}
@@ -48,6 +55,12 @@ function ProfileChip() {
 
 export default function Page() {
   const [mode, setMode] = useState<"learn" | "quiz">("learn");
+  const convRef = useRef<ConversationHandle>(null);
+
+  // Disability mode: the physical button on the device (firmware "TOUCH 1") starts the
+  // voice agent hands-free. Sighted users just open the app and use the dashboard normally.
+  useEffect(() => controller.onDeviceButton(() => convRef.current?.start()), []);
+
   return (
     <ConversationProvider>
       <main className="paper-bg grain flex h-screen flex-col text-ink">
@@ -62,7 +75,16 @@ export default function Page() {
               </span>
             </div>
           </div>
-          <ProfileChip />
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => convRef.current?.start()}
+              className="rounded-full bg-saffron px-4 py-2 text-xs font-semibold text-ink shadow-card transition hover:bg-saffronDeep hover:text-bone"
+              aria-label="Start hands-free voice mode — close your eyes and let Dot guide you"
+            >
+              🎧 Hands-free voice mode
+            </button>
+            <ProfileChip />
+          </div>
         </header>
 
         {/* two-pane: agent (left) | simulation (right) */}
@@ -74,7 +96,7 @@ export default function Page() {
               </span>
             </div>
             <div className="min-h-0 flex-1">
-              <Conversation />
+              <Conversation ref={convRef} />
             </div>
           </section>
 

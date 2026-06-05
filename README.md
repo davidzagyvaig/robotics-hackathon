@@ -98,14 +98,20 @@ Browser→device: `ID?`, `B<6 bits>`, `Z`, `E`, `D`, `H`. Device→browser: `BOO
 
 ## Status
 - ✅ **Two-pane app** (tutor | cell) with a warm editorial UI. Builds clean (`npm run build`).
-- ✅ **No-hardware mode** — full tutor + on-screen cell, zero device needed (simulation-first).
-- ✅ **Curriculum** (decade-based, `lib/curriculum.ts`) + **progress** (`lib/progress.ts`, "remembers you").
-- ✅ **render_braille** (letter) + **render_word** (steps a word across the cell, highlights each letter).
-- ✅ **Voice toggle** (mute → read captions) for sighted learners; live transcript.
+- ✅ **Built for blind users first** — voice-first, no login/forms. The device button (or the
+  on-screen **Hands-free voice mode** button) hands the whole app to the voice agent. Sighted users
+  just open the dashboard normally (voice optional).
+- ✅ **Voice identity** — the agent asks your name and maps it to your profile; returning learners are
+  greeted back and resumed at their level (no typing, ever).
+- ✅ **Local Postgres** (PGlite, in-repo, no cloud/Docker) — learners, mastered letters, quiz attempts,
+  streaks. Travels with the repo; `npm install` and it runs. A **/learners** dashboard tracks everyone.
+- ✅ **No-hardware mode** + **Watch-demo** — full tutor + on-screen cell, zero device (sim-first / B-roll).
+- ✅ **Quiz mode** — mystery letter → multiple-choice → scored, masters letters, logged to the DB.
+- ✅ **Curriculum** (decade-based, `lib/curriculum.ts`), **render_braille** + **render_word**, voice toggle + captions.
+- ✅ **Emotional agent** — Dot has real personality + expressive ElevenLabs delivery (`agent/prompt.md`).
 - ✅ v2 firmware (servos + haptic + touch) over USB-CDC **and** BLE, single `BrailleBuddy` identity.
-- ✅ ElevenLabs agent prompt + two client tools + dynamic variables + signed-URL route wired.
-- 🔜 Drop in ElevenLabs API key · flash real board + calibrate dots · deploy to Vercel.
-- 📋 Tabled ideas (notifications, native apps, quiz mode, …) → [`docs/BACKLOG.md`](docs/BACKLOG.md).
+- 🔜 Drop in ElevenLabs API key · flash real board + calibrate dots · deploy.
+- 📋 More ideas → [`docs/BACKLOG.md`](docs/BACKLOG.md).
 
 ## History
 This repo began as **DermaScout** (a voice-guided 3D skin-documentation station). That project is

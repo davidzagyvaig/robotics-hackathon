@@ -1,17 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardRef } from "react";
 import { useConversation } from "@elevenlabs/react";
 import { controller } from "@/lib/controller";
 import { progress, useProfile, knownLetters } from "@/lib/progress";
 import { lessonByLevel } from "@/lib/curriculum";
 
-// The LEFT pane: the voice tutor. The agent has two client tools — render_braille (one
-// letter) and render_word (step a word) — both run here in the browser and drive the
-// cell sim / device via the controller. We also show a live transcript (captions) so the
-// lesson works even with the voice muted, and pass the learner's level to the agent.
+// The LEFT pane: the voice tutor — and the brain of "disability mode" (it can run the whole
+// app hands-free). Tools: identify_learner (voice identity → local Postgres), render_braille
+// (one letter), render_word (step a word). A live transcript doubles as captions so the
+// lesson works muted too.
 
 const clientTools = {
+  // Voice-first identity: the agent asks the name, we map it to a learner in the local DB.
+  identify_learner: async (p: { name: string }) => {
+    const r = await progress.identify(p.name);
+    return r.isNew
+      ? `New learner "${r.name}" created. Start at level 1.`
+      : `Returning learner "${r.name}", level ${r.level}, ${r.mastered.length} letters mastered, ${r.streak}-day streak. Greet them back and resume.`;
+  },
   render_braille: async (p: { character: string; seconds: number }) =>
     controller.renderBraille(p.character, p.seconds),
   render_word: async (p: { word: string; seconds_per_letter?: number; seconds?: number }) =>
@@ -20,11 +27,12 @@ const clientTools = {
 
 type Line = { id: number; role: "user" | "ai"; text: string };
 
-export default function Conversation() {
+export type ConversationHandle = { start: () => void };
+
+const Conversation = forwardRef<ConversationHandle>(function Conversation(_props, ref) {
   const profile = useProfile();
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<Line[]>([]);
-  const [nameDraft, setNameDraft] = useState("");
   const idRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -43,12 +51,16 @@ export default function Conversation() {
   const isSpeaking = conversation.isSpeaking;
   const active = status === "connected" || status === "connecting";
 
-  // keep the agent's audio in sync with the voice toggle
+  // silent resume from the local DB on first load
+  useEffect(() => {
+    void progress.hydrate();
+  }, []);
+
   useEffect(() => {
     try {
       conversation.setVolume?.({ volume: profile.voiceEnabled ? 1 : 0 });
     } catch {
-      /* SDK without setVolume — toggle still controls UI */
+      /* SDK without setVolume */
     }
   }, [profile.voiceEnabled, status, conversation]);
 
@@ -58,7 +70,6 @@ export default function Conversation() {
 
   const start = useCallback(async () => {
     setError(null);
-    progress.touch();
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
       const res = await fetch("/api/get-signed-url");
@@ -68,9 +79,11 @@ export default function Conversation() {
       conversation.startSession({
         signedUrl: data.signedUrl,
         clientTools,
-        // Injected into the agent's prompt as {{variables}} — see agent/prompt.md.
         dynamicVariables: {
-          user_name: profile.name ?? "there",
+          // If we already know this browser's learner, the agent greets them by name and
+          // skips the name question. Otherwise it will ask and call identify_learner.
+          user_name: profile.name ?? "unknown",
+          is_returning: profile.name ? "yes" : "no",
           level: String(profile.level),
           lesson_title: lesson?.title ?? "First five",
           known_letters: knownLetters(profile).join(", ") || "none yet",
@@ -81,9 +94,11 @@ export default function Conversation() {
     }
   }, [conversation, profile]);
 
+  // let the device button / parent start the agent
+  useImperativeHandle(ref, () => ({ start: () => void start() }), [start]);
+
   return (
     <div className="flex h-full flex-col">
-      {/* header row: status + voice toggle */}
       <div className="flex items-center justify-between border-b border-line px-5 py-4">
         <div className="flex items-center gap-2.5">
           <span
@@ -111,16 +126,15 @@ export default function Conversation() {
         </button>
       </div>
 
-      {/* transcript / captions */}
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
         {transcript.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
             <p className="max-w-xs text-sm leading-relaxed text-muted">
               {active
-                ? "Say hello to Dot, your braille tutor. Try “teach me the letter C” or “let’s read a word.”"
+                ? "Say hello — Dot will ask your name, then start your lesson."
                 : profile.name
-                  ? `Welcome back, ${profile.name}. Press start when you’re ready.`
-                  : "Meet Dot — a patient braille tutor. Press start and say hello."}
+                  ? `Welcome back, ${profile.name}. Press start to continue.`
+                  : "Meet Dot — your braille tutor. Press start and just talk."}
             </p>
           </div>
         ) : (
@@ -128,9 +142,7 @@ export default function Conversation() {
             <div key={l.id} className={`flex ${l.role === "user" ? "justify-end" : "justify-start"}`}>
               <div
                 className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-[13px] leading-relaxed ${
-                  l.role === "user"
-                    ? "bg-ink text-bone"
-                    : "border border-line bg-paper text-ink2"
+                  l.role === "user" ? "bg-ink text-bone" : "border border-line bg-paper text-ink2"
                 }`}
               >
                 {l.text}
@@ -140,30 +152,7 @@ export default function Conversation() {
         )}
       </div>
 
-      {/* controls */}
       <div className="border-t border-line px-5 py-4">
-        {!active && !profile.name && (
-          <form
-            className="mb-3 flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (nameDraft.trim()) progress.setName(nameDraft);
-            }}
-          >
-            <input
-              value={nameDraft}
-              onChange={(e) => setNameDraft(e.target.value)}
-              placeholder="Your name (optional)"
-              className="flex-1 rounded-full border border-line bg-paper px-4 py-2 text-sm outline-none placeholder:text-muted focus:border-ink/40"
-            />
-            <button
-              type="submit"
-              className="rounded-full border border-line bg-paper px-3 py-2 text-xs text-ink2 hover:border-ink/30"
-            >
-              save
-            </button>
-          </form>
-        )}
         {!active ? (
           <button
             onClick={() => void start()}
@@ -183,4 +172,6 @@ export default function Conversation() {
       </div>
     </div>
   );
-}
+});
+
+export default Conversation;

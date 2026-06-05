@@ -1,61 +1,49 @@
-// Learner progress — a tiny local "profile" so BrailleBuddy remembers who you are and
-// where you left off ("Duolingo for braille"). localStorage only; no backend needed for
-// the demo. Swap the load/save pair for an API later without touching the UI.
+// Learner profile — backed by the local Postgres (lib/db.ts via /api), with a localStorage
+// cache for instant render + silent resume. Identity is the spoken NAME (voice-first, no
+// login): the agent calls identify(name) → the DB finds/creates the learner and we hydrate.
 
 import { useSyncExternalStore } from "react";
 import { MAX_LEVEL, lettersThroughLevel } from "./curriculum";
 
 export type Profile = {
+  id: string | null;
   name: string | null;
-  level: number; // current level (1..MAX_LEVEL)
-  mastered: string[]; // letters the learner has demonstrably read
-  completedLessons: string[]; // lesson ids
-  streak: number; // days in a row
-  lastSeen: string | null; // ISO date (yyyy-mm-dd)
+  level: number;
+  mastered: string[];
+  streak: number;
   voiceEnabled: boolean;
 };
 
-const KEY = "braillebuddy.profile.v1";
+const CACHE = "braillebuddy.profile.v2";
 
 const DEFAULT: Profile = {
+  id: null,
   name: null,
   level: 1,
   mastered: [],
-  completedLessons: [],
   streak: 0,
-  lastSeen: null,
   voiceEnabled: true,
 };
 
-function today(): string {
-  // local date yyyy-mm-dd
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function load(): Profile {
+function loadCache(): Profile {
   if (typeof window === "undefined") return DEFAULT;
   try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return DEFAULT;
-    return { ...DEFAULT, ...JSON.parse(raw) };
+    const raw = window.localStorage.getItem(CACHE);
+    return raw ? { ...DEFAULT, ...JSON.parse(raw) } : DEFAULT;
   } catch {
     return DEFAULT;
   }
 }
 
-// --- a tiny external store so React re-renders on change across the app ---
-let current: Profile = load();
+let current: Profile = loadCache();
 const listeners = new Set<() => void>();
+const emit = () => listeners.forEach((l) => l());
 
-function emit() {
-  listeners.forEach((l) => l());
-}
-function persist(next: Profile) {
+function set(next: Profile) {
   current = next;
   if (typeof window !== "undefined") {
     try {
-      window.localStorage.setItem(KEY, JSON.stringify(next));
+      window.localStorage.setItem(CACHE, JSON.stringify(next));
     } catch {
       /* ignore */
     }
@@ -63,47 +51,76 @@ function persist(next: Profile) {
   emit();
 }
 
+async function post(path: string, body: unknown) {
+  try {
+    const r = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return r.ok ? await r.json() : null;
+  } catch {
+    return null; // offline → cache still holds; never surface an error to a blind user
+  }
+}
+
 export const progress = {
-  get(): Profile {
-    return current;
-  },
-  subscribe(cb: () => void): () => void {
+  get: () => current,
+  subscribe(cb: () => void) {
     listeners.add(cb);
     return () => listeners.delete(cb);
   },
-  setName(name: string) {
-    persist({ ...current, name: name.trim() || null });
+
+  /** Silent resume on app load: rehydrate the last learner from the DB. */
+  async hydrate() {
+    if (typeof window === "undefined") return;
+    const id = current.id ?? window.localStorage.getItem("braillebuddy.uid");
+    if (!id) return;
+    try {
+      const r = await fetch(`/api/profile?id=${encodeURIComponent(id)}`);
+      if (r.ok) {
+        const u = await r.json();
+        set({ id: u.id, name: u.name, level: u.level, mastered: u.mastered, streak: u.streak, voiceEnabled: u.voiceEnabled });
+      }
+    } catch {
+      /* keep cache */
+    }
   },
+
+  /** Voice identity: map a spoken name to a learner (find or create) and load progress. */
+  async identify(name: string): Promise<{ isNew: boolean; name: string; level: number; mastered: string[]; streak: number }> {
+    const data = await post("/api/identify", { name });
+    if (!data) {
+      // offline fallback: keep a local-only profile so the lesson still runs
+      set({ ...current, name: name.trim() });
+      return { isNew: true, name: name.trim(), level: current.level, mastered: current.mastered, streak: current.streak };
+    }
+    if (typeof window !== "undefined") window.localStorage.setItem("braillebuddy.uid", data.id);
+    set({ id: data.id, name: data.name, level: data.level, mastered: data.mastered, streak: data.streak, voiceEnabled: data.voiceEnabled });
+    return { isNew: data.isNew, name: data.name, level: data.level, mastered: data.mastered, streak: data.streak };
+  },
+
   setVoice(enabled: boolean) {
-    persist({ ...current, voiceEnabled: enabled });
+    set({ ...current, voiceEnabled: enabled });
+    if (current.id) void post("/api/progress", { id: current.id, voiceEnabled: enabled });
   },
+
   setLevel(level: number) {
-    persist({ ...current, level: Math.max(1, Math.min(MAX_LEVEL, level)) });
+    const lvl = Math.max(1, Math.min(MAX_LEVEL, level));
+    set({ ...current, level: lvl });
+    if (current.id) void post("/api/progress", { id: current.id, level: lvl });
   },
+
   master(letters: string[]) {
-    const set = new Set(current.mastered);
-    letters.forEach((c) => set.add(c.toLowerCase()));
-    persist({ ...current, mastered: [...set] });
+    const s = new Set(current.mastered);
+    letters.forEach((c) => s.add(c.toLowerCase()));
+    set({ ...current, mastered: [...s] });
+    if (current.id) void post("/api/progress", { id: current.id, mastered: letters });
   },
-  completeLesson(id: string) {
-    const set = new Set(current.completedLessons);
-    set.add(id);
-    persist({ ...current, completedLessons: [...set] });
-  },
-  /** Call when a session starts: bump streak if it's a new day. */
-  touch() {
-    const t = today();
-    if (current.lastSeen === t) return;
-    const yesterday = (() => {
-      const d = new Date();
-      d.setDate(d.getDate() - 1);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    })();
-    const streak = current.lastSeen === yesterday ? current.streak + 1 : 1;
-    persist({ ...current, lastSeen: t, streak });
-  },
-  reset() {
-    persist({ ...DEFAULT });
+
+  recordQuiz(letter: string, correct: boolean) {
+    if (correct) this.master([letter]);
+    if (current.id) void post("/api/quiz", { id: current.id, letter, correct });
   },
 };
 
@@ -111,7 +128,6 @@ export function useProfile(): Profile {
   return useSyncExternalStore(progress.subscribe, progress.get, () => DEFAULT);
 }
 
-/** Letters the learner is expected to know at their current level. */
 export function knownLetters(p: Profile): string[] {
-  return lettersThroughLevel(p.level);
+  return p.mastered.length ? p.mastered : lettersThroughLevel(p.level);
 }

@@ -8,12 +8,18 @@ so anyone on the team can reproduce it. The agent runs in the browser via `@elev
 
 1. **Create the agent.** ElevenLabs dashboard → **Agents** (Conversational AI) → *Create agent*.
 2. **System prompt.** Paste the contents of [`prompt.md`](./prompt.md).
-3. **Voice.** Pick a **warm, calm, patient, clear** voice — a tutor people want to keep using.
-   Audition the *calm* / *reassuring* / *language-tutor* / *educational* categories in the ElevenLabs
-   voice library (e.g. a warm female like *Matilda* or *Sarah*, or a calm male like *Henry*). Set the
-   model to a low-latency one (**`eleven_turbo_v2_5`** or **`eleven_flash_v2_5`**) so replies feel
-   instant. See `docs/PEDAGOGY.md` for the rationale. The learner can mute the voice in the app
-   (sighted learners read the captions instead), so clarity of wording matters as much as the voice.
+3. **Voice — this is the whole product.** The goal: hand someone the device, tell them to close their
+   eyes, and Dot's voice carries everything. Pick a voice with **warmth and real emotional range**, not
+   just "clear." Audition the *calm* / *reassuring* / *characterful* / *language-tutor* categories (e.g.
+   a warm expressive female like *Matilda*/*Sarah*, or a warm male like *Will*/*Henry*). 
+   - **Model:** prefer the most **expressive** model your plan allows so the audio-tag cues in
+     `prompt.md` (`[warmly]`, `[delighted]`, `[laughs softly]`, pauses) actually land — **Eleven v3**
+     for maximum emotion, or **`eleven_turbo_v2_5`** for the best expressiveness-vs-latency balance in a
+     live agent. Avoid the flattest/fastest model — emotion beats raw speed here.
+   - In the agent's voice settings, lean **stability lower / style higher** so delivery is lively and
+     warm rather than monotone. Test the win-celebration and the after-a-mistake reassurance lines.
+   - The learner can mute the voice in the app (sighted learners read captions), so wording carries
+     feeling too. Rationale + curriculum: `docs/PEDAGOGY.md`.
 4. **Add BOTH client tools.** Agent → **Tools** → *Add tool* → type **Client**, once per tool, matching
    [`tools.json`](./tools.json):
    - **`render_braille`** — params `character` (string, required), `seconds` (number, required).

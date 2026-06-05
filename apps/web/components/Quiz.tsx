@@ -56,7 +56,7 @@ export default function Quiz() {
     setPicked(c);
     const correct = c === answer;
     setScore((s) => ({ right: s.right + (correct ? 1 : 0), total: s.total + 1 }));
-    if (correct && answer) progress.master([answer]);
+    if (answer) progress.recordQuiz(answer, correct); // logs attempt + masters on correct
     // reveal the letter on the cell, then move on
     void controller.showLetter(answer!); // currentLabel becomes visible (hideLabel flips off below)
     setTimeout(() => void next(), correct ? 1100 : 1900);
