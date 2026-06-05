@@ -1,71 +1,75 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { controller, useBrailleState } from "@/lib/controller";
 
+// Voice-first, on-screen by default. No prominent connect buttons — this is built for blind
+// learners, so the cell just works on screen and the voice agent guides everything. A
+// discreet "physical device" option stays for the hardware demo.
 export default function ConnectDevice() {
   const { usbSupported, bleSupported, connected, connecting, simulated, transport, deviceName, error } =
     useBrailleState();
+  const [showDevice, setShowDevice] = useState(false);
 
   useEffect(() => {
     controller.reportSupport();
   }, []);
 
-  if (connected) {
-    const mode = simulated ? "On screen" : transport === "ble" ? "Bluetooth" : "USB";
+  // Connected to a REAL device → small confirmation + disconnect.
+  if (connected && !simulated) {
+    const mode = transport === "ble" ? "Bluetooth" : "USB";
     return (
-      <div className="flex flex-col items-center gap-2">
+      <div className="flex flex-col items-center gap-1.5">
         <div className="flex items-center gap-2 rounded-full border-2 border-green bg-green-light px-4 py-1.5 text-sm font-extrabold text-green-dark">
           <span className="h-2.5 w-2.5 rounded-full bg-green" />
-          {simulated ? "On-screen cell" : (deviceName?.replace(/\s*v\d+$/, "") ?? "BrailleBuddy")} · {mode}
+          {(deviceName?.replace(/\s*v\d+$/, "") ?? "BrailleBuddy")} · {mode}
         </div>
         <button
           onClick={() => void controller.disconnect()}
           className="text-xs font-bold text-hare transition hover:text-wolf"
         >
-          {simulated ? "exit on-screen mode" : "disconnect"}
+          disconnect device
         </button>
       </div>
     );
   }
 
-  const none = !usbSupported && !bleSupported;
+  // Default (on-screen): calm status, with a discreet way to attach hardware.
+  const connectDevice = async (kind: "usb" | "ble") => {
+    await controller.disconnect(); // leave on-screen mode first
+    await controller.connect(kind);
+  };
 
   return (
-    <div className="flex flex-col items-center gap-3">
-      <div className="flex flex-wrap items-center justify-center gap-3">
-        {usbSupported && (
-          <button
-            onClick={() => void controller.connect("usb")}
-            disabled={connecting}
-            className="btn3d btn-blue text-sm"
-          >
-            {connecting ? "Connecting…" : "Connect USB"}
-          </button>
-        )}
-        {bleSupported && (
-          <button
-            onClick={() => void controller.connect("ble")}
-            disabled={connecting}
-            className="btn-white px-5 py-3 text-sm uppercase"
-          >
-            {connecting ? "Connecting…" : "Bluetooth"}
-          </button>
-        )}
+    <div className="flex flex-col items-center gap-2">
+      <div className="flex items-center gap-2 text-sm font-bold text-hare">
+        <span className="h-2 w-2 rounded-full bg-green" />
+        On-screen cell ready
       </div>
 
-      <button
-        onClick={() => controller.connectSimulated()}
-        className="text-xs font-extrabold uppercase tracking-wide text-hare transition hover:text-green-dark"
-      >
-        try it on screen — no device needed →
-      </button>
-
-      {none && (
-        <p className="max-w-xs text-center text-xs font-bold text-wolf">
-          On-screen mode works everywhere. For real dots, use Chrome/Edge (USB) or Chrome on
-          Android (Bluetooth).
-        </p>
+      {!showDevice ? (
+        <button
+          onClick={() => setShowDevice(true)}
+          className="text-xs font-bold text-hare/80 underline-offset-2 transition hover:text-wolf hover:underline"
+        >
+          have a physical BrailleBuddy? connect it
+        </button>
+      ) : (
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {usbSupported && (
+            <button onClick={() => void connectDevice("usb")} disabled={connecting} className="btn3d btn-blue text-xs">
+              {connecting ? "…" : "USB"}
+            </button>
+          )}
+          {bleSupported && (
+            <button onClick={() => void connectDevice("ble")} disabled={connecting} className="btn-white px-4 py-2 text-xs uppercase">
+              {connecting ? "…" : "Bluetooth"}
+            </button>
+          )}
+          <button onClick={() => setShowDevice(false)} className="text-xs font-bold text-hare">
+            cancel
+          </button>
+        </div>
       )}
       {error && <p className="max-w-xs text-center text-xs font-bold text-cardinal">{error}</p>}
     </div>

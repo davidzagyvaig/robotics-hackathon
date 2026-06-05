@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardRef } from "react";
 import { useConversation } from "@elevenlabs/react";
 import { controller } from "@/lib/controller";
-import { progress, useProfile, knownLetters } from "@/lib/progress";
-import { lessonByLevel } from "@/lib/curriculum";
+import { progress, useProfile } from "@/lib/progress";
 
 // The LEFT pane: the voice tutor (and the brain of hands-free "disability mode"). Tools:
 // identify_learner (voice identity → local Postgres), render_braille, render_word. A live
@@ -13,9 +12,8 @@ import { lessonByLevel } from "@/lib/curriculum";
 const clientTools = {
   identify_learner: async (p: { name: string }) => {
     const r = await progress.identify(p.name);
-    return r.isNew
-      ? `New learner "${r.name}" created. Start at level 1.`
-      : `Returning learner "${r.name}", level ${r.level}, ${r.mastered.length} letters mastered, ${r.streak}-day streak. Greet them back and resume.`;
+    // Always onboard from the beginning this session; this tool only saves their progress.
+    return `Saved. Greet ${r.name} warmly by name, then begin teaching from the very start with the letter A.`;
   },
   // Canonical tool: render any TEXT on the cell. A single character is held as one letter;
   // a longer string is stepped across the cell as a word. Accepts text/character/word so it
@@ -150,16 +148,16 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
         if (!res.ok) throw new Error(data.error ?? "Failed to get a signed URL");
         return data.signedUrl as string;
       })());
-      const lesson = lessonByLevel(profile.level);
       conversation.startSession({
         signedUrl: url,
         clientTools,
+        // Every session starts fresh from onboarding (the cell has no sensors / no resume).
         dynamicVariables: {
           user_name: "unknown",
           is_returning: "no",
-          level: String(profile.level),
-          lesson_title: lesson?.title ?? "First five",
-          known_letters: knownLetters(profile).join(", ") || "none yet",
+          level: "1",
+          lesson_title: "First five",
+          known_letters: "none yet",
         },
       });
     } catch (e) {

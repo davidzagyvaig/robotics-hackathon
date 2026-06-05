@@ -46,9 +46,12 @@ export default function Page() {
   const [mode, setMode] = useState<"learn" | "quiz">("learn");
   const convRef = useRef<ConversationHandle>(null);
 
-  // Disability mode: the physical device button (firmware "TOUCH 1") starts the voice
-  // agent hands-free. Sighted users just open the app and use the dashboard normally.
-  useEffect(() => controller.onDeviceButton(() => convRef.current?.start()), []);
+  // The device is just motors (pins up/down) with no sensors — so the on-screen cell IS
+  // the device by default and everything is voice-guided. Make the cell ready instantly.
+  useEffect(() => {
+    controller.connectSimulated();
+    return controller.onDeviceButton(() => convRef.current?.start());
+  }, []);
 
   return (
     <ConversationProvider>

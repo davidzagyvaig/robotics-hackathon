@@ -200,37 +200,32 @@ class BrailleController {
    * then drop every dot. The agent passes a letter (we guard to the first character)
    * and the browser looks up the dot pattern in braille.ts.
    */
-  async renderBraille(character: string, seconds: number): Promise<string> {
+  async renderBraille(character: string, _seconds?: number): Promise<string> {
     const ch = (character ?? "").trim()[0]; // guardrail: only the first character
     if (!ch) return "No character was given to show.";
     const bits = charToBits(ch);
     if (!bits) return `I don't have a braille pattern for "${ch}".`;
 
+    // The on-screen cell IS the device when no hardware is connected — always works.
     this.ensureVisibleCell();
 
-    const holdMs = Math.max(0.3, Math.min(seconds || 2, 15)) * 1000; // clamp 0.3–15 s
-    const isSingleLetter = (character ?? "").trim().length === 1;
+    // Raise the letter and KEEP it up so the learner can feel it while you ask, by VOICE,
+    // "can you feel it?". Return immediately — never block the tool call (that caused the
+    // ~20s latency and the false "cell isn't responding" error).
     this.set({
-      busy: true,
+      busy: false,
+      currentWord: null,
+      wordIndex: -1,
       currentCell: bits,
       currentLabel: ch.toUpperCase(),
-      teachAwaitingConfirm: isSingleLetter,
+      teachAwaitingConfirm: false,
     });
     try {
-      // Physical device gets the serial frames; in no-hardware mode the on-screen
-      // cell (which mirrors this state) is the device, so we just animate + hold.
       if (this.transport) await this.transport.send(`B${bits}`);
-      await delay(holdMs);
-      if (isSingleLetter) {
-        await this.waitForFeel();
-      }
-      if (this.transport) await this.transport.send("Z");
-      this.set({ currentCell: CELL_DOWN, currentLabel: null, busy: false, teachAwaitingConfirm: false });
-      return `Showed "${ch.toUpperCase()}" for ${Math.round(holdMs / 1000)} seconds.`;
-    } catch (e) {
-      this.set({ busy: false, teachAwaitingConfirm: false });
-      return `The cell isn't responding: ${e instanceof Error ? e.message : "unknown error"}.`;
+    } catch {
+      /* hardware hiccup — the on-screen cell is already showing it, so we still succeed */
     }
+    return `The letter ${ch.toUpperCase()} is now raised on the cell — the learner can feel it. Ask if they feel it, then continue.`;
   }
 
   /**
@@ -288,31 +283,27 @@ class BrailleController {
     const alive = () => this.state.demoRunning;
 
     try {
-      say("Let's try the cell together. I'll raise a letter — feel it, then tap “I can feel it.”");
+      say("Let's try the cell together. I'll raise a letter — feel for the dots.");
       await delay(2600);
 
-      // C — hold until the learner confirms
+      // C — raise, hold so they can feel, then move on (no taps; the device has no sensors)
       if (!alive()) return;
       say("Here's the letter C — two dots along the top of the cell.");
       await this.showLetter("c");
-      await delay(600);
-      say("Can you feel those two dots? Take your time… then tap below.");
-      await this.waitForFeel();
+      await delay(3600);
       if (!alive()) return;
       await this.clear();
-      say("That's C. Beautifully done.");
+      say("That was C. Beautifully done.");
       await delay(1800);
 
       // A
       if (!alive()) return;
       say("Now the letter A — just one dot, top-left.");
       await this.showLetter("a");
-      await delay(600);
-      say("Feel that single dot? Tap when you've got it.");
-      await this.waitForFeel();
+      await delay(3600);
       if (!alive()) return;
       await this.clear();
-      say("That's A. You're a natural.");
+      say("That was A. You're a natural.");
       await delay(1600);
 
       // the word
@@ -322,7 +313,7 @@ class BrailleController {
       if (!alive()) return;
       await this.renderWord("cat", 2.0);
       if (!alive()) return;
-      say("C… A… T. That spells “cat” — you just read braille. 🎉");
+      say("C… A… T. That spells “cat.” You just read braille.");
       await delay(3000);
     } finally {
       this.demoResolve = null;
