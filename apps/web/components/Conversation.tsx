@@ -64,6 +64,7 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
 
   const start = useCallback(async () => {
     setError(null);
+    setTranscript([]); // fresh conversation each time you start
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
       const res = await fetch("/api/get-signed-url");
