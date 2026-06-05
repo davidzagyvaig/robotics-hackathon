@@ -67,6 +67,12 @@ class BrailleController {
   private listeners = new Set<() => void>();
   private pendingIdentify: ((name: string) => void) | null = null;
 
+  private ensureVisibleCell(): void {
+    if (!this.state.connected && !this.state.simulated) {
+      this.connectSimulated();
+    }
+  }
+
   subscribe = (cb: () => void): (() => void) => {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);
@@ -191,13 +197,12 @@ class BrailleController {
    * and the browser looks up the dot pattern in braille.ts.
    */
   async renderBraille(character: string, seconds: number): Promise<string> {
-    if (!this.state.connected) {
-      return "No BrailleBuddy is connected, so I couldn't show that.";
-    }
     const ch = (character ?? "").trim()[0]; // guardrail: only the first character
     if (!ch) return "No character was given to show.";
     const bits = charToBits(ch);
     if (!bits) return `I don't have a braille pattern for "${ch}".`;
+
+    this.ensureVisibleCell();
 
     const holdMs = Math.max(0.3, Math.min(seconds || 2, 15)) * 1000; // clamp 0.3–15 s
     this.set({ busy: true, currentCell: bits, currentLabel: ch.toUpperCase() });
@@ -221,13 +226,12 @@ class BrailleController {
    * the active letter highlighted. Indicator cells (number/capital signs) are shown too.
    */
   async renderWord(word: string, secondsPerLetter: number): Promise<string> {
-    if (!this.state.connected) {
-      return "No BrailleBuddy is connected, so I couldn't show that word.";
-    }
     const clean = (word ?? "").trim();
     if (!clean) return "No word was given to show.";
     const cells = textToCells(clean);
     if (cells.length === 0) return `I couldn't turn "${clean}" into braille.`;
+
+    this.ensureVisibleCell();
 
     const holdMs = Math.max(0.3, Math.min(secondsPerLetter || 1.5, 8)) * 1000;
     const gapMs = 320; // dots-down pause between letters so each is felt as separate
@@ -331,7 +335,7 @@ class BrailleController {
 
   /** Raise a letter and HOLD it (no auto-clear) — used by Quiz mode for "what is this?". */
   async showLetter(character: string): Promise<boolean> {
-    if (!this.state.connected) return false;
+    this.ensureVisibleCell();
     const ch = (character ?? "").trim()[0];
     if (!ch) return false;
     const bits = charToBits(ch);

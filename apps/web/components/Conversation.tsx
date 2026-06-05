@@ -75,6 +75,8 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
     setError(null);
     setTranscript([]); // fresh conversation each time you start
     try {
+      controller.connectSimulated();
+      await controller.clear();
       await navigator.mediaDevices.getUserMedia({ audio: true });
       const res = await fetch("/api/get-signed-url");
       const data = await res.json();
@@ -84,8 +86,8 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
         signedUrl: data.signedUrl,
         clientTools,
         dynamicVariables: {
-          user_name: profile.name ?? "unknown",
-          is_returning: profile.name ? "yes" : "no",
+          user_name: "unknown",
+          is_returning: "no",
           level: String(profile.level),
           lesson_title: lesson?.title ?? "First five",
           known_letters: knownLetters(profile).join(", ") || "none yet",
