@@ -6,19 +6,16 @@ import { controller, useBrailleState } from "@/lib/controller";
 import { progress, useProfile } from "@/lib/progress";
 import { lettersThroughLevel } from "@/lib/curriculum";
 
-// Self-contained practice mode — works with NO voice key. Shows a mystery letter on the
-// cell (label hidden), the learner picks from choices, we check, give feedback, master the
-// letter on a correct read, and track a score. Also great B-roll for the video.
+// Practice mode — works with NO voice key. Shows a mystery letter on the cell (label
+// hidden), pick from choices, get a big green/red feedback footer + Continue. Tracks a
+// score, masters letters on a correct read, logs every attempt to the local Postgres.
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("");
 
 function pick<T>(arr: T[], n: number, exclude: T[] = []): T[] {
   const pool = arr.filter((x) => !exclude.includes(x));
   const out: T[] = [];
-  while (out.length < n && pool.length) {
-    const i = Math.floor(Math.random() * pool.length);
-    out.push(pool.splice(i, 1)[0]);
-  }
+  while (out.length < n && pool.length) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
   return out;
 }
 
@@ -36,15 +33,14 @@ export default function Quiz() {
   const next = useCallback(async () => {
     setPicked(null);
     const ans = pick(letters, 1)[0];
-    const distractors = pick(letters, 3, [ans]);
-    const opts = [ans, ...distractors].sort(() => Math.random() - 0.5);
+    const opts = [ans, ...pick(letters, 3, [ans])].sort(() => Math.random() - 0.5);
     setAnswer(ans);
     setChoices(opts);
     if (!connected) controller.connectSimulated();
     await controller.showLetter(ans);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [letters, connected]);
 
-  // start the first question when this mode mounts
   useEffect(() => {
     void next();
     return () => void controller.clear();
@@ -56,68 +52,43 @@ export default function Quiz() {
     setPicked(c);
     const correct = c === answer;
     setScore((s) => ({ right: s.right + (correct ? 1 : 0), total: s.total + 1 }));
-    if (answer) progress.recordQuiz(answer, correct); // logs attempt + masters on correct
-    // reveal the letter on the cell, then move on
-    void controller.showLetter(answer!); // currentLabel becomes visible (hideLabel flips off below)
-    setTimeout(() => void next(), correct ? 1100 : 1900);
+    if (answer) progress.recordQuiz(answer, correct);
+    if (answer) void controller.showLetter(answer); // reveal on the cell
   };
 
   const answered = picked !== null;
-  const pct = score.total ? Math.round((score.right / score.total) * 100) : 0;
+  const correct = picked === answer;
+  const progressPct = score.total ? Math.min(100, (score.total / 10) * 100) : 0;
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-line px-5 py-4">
-        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-saffronDeep">
-          Quiz · what letter is this?
-        </span>
-        <span className="font-mono text-[11px] text-muted tnum">
-          {score.right}/{score.total} {score.total > 0 && `· ${pct}%`}
-        </span>
+    <div className="relative flex h-full flex-col">
+      {/* top: progress + score */}
+      <div className="flex items-center gap-4 px-6 pt-5">
+        <div className="progress flex-1">
+          <span style={{ width: `${progressPct}%` }} />
+        </div>
+        <span className="text-sm font-extrabold text-fire">⭐ {score.right}</span>
       </div>
 
-      <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6 py-8">
+      <div className="flex flex-1 flex-col items-center justify-center gap-7 px-6 py-6">
+        <p className="text-center text-xl font-extrabold text-eel">Which letter is this?</p>
         <BrailleCell hideLabel={!answered} />
 
-        {/* feedback line */}
-        <div className="h-5">
-          {answered &&
-            (picked === answer ? (
-              <p className="animate-floatUp text-sm font-semibold text-saffronDeep">
-                Yes — that’s {answer?.toUpperCase()}. 🎉
-              </p>
-            ) : (
-              <p className="animate-floatUp text-sm text-clay">
-                That was {answer?.toUpperCase()} — keep going, you’ve got this.
-              </p>
-            ))}
-        </div>
-
-        {/* choices */}
         <div className="grid grid-cols-4 gap-3">
           {choices.map((c) => {
-            const state =
-              !answered
-                ? "idle"
-                : c === answer
-                  ? "correct"
-                  : c === picked
-                    ? "wrong"
-                    : "dim";
+            const isAns = c === answer;
+            const isPick = c === picked;
+            let cls = "btn-white h-16 w-16 text-3xl";
+            if (answered && isAns) cls = "h-16 w-16 rounded-2xl text-3xl text-white bg-green";
+            else if (answered && isPick) cls = "h-16 w-16 rounded-2xl text-3xl text-white bg-cardinal";
+            else if (answered) cls = "h-16 w-16 rounded-2xl text-3xl text-hare bg-polar";
             return (
               <button
                 key={c}
                 onClick={() => choose(c)}
                 disabled={answered}
-                className={[
-                  "h-14 w-14 rounded-xl border font-display text-2xl font-semibold transition",
-                  state === "idle" && "border-line bg-paper text-ink hover:border-ink/40 hover:bg-bone2",
-                  state === "correct" && "border-saffron bg-saffron/15 text-saffronDeep",
-                  state === "wrong" && "border-clay bg-clay/10 text-clay",
-                  state === "dim" && "border-line bg-paper text-muted/40",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
+                className={cls}
+                style={answered ? { border: "none" } : undefined}
               >
                 {c.toUpperCase()}
               </button>
@@ -126,11 +97,35 @@ export default function Quiz() {
         </div>
       </div>
 
-      <div className="border-t border-line px-5 py-3 text-center">
-        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">
-          drawing from {letters.length} letters you’re learning
-        </span>
-      </div>
+      {/* Duolingo-style result footer */}
+      {answered && (
+        <div
+          className={`animate-slideUp flex items-center justify-between gap-4 px-6 py-5 ${
+            correct ? "bg-green-light" : "bg-cardinal-light"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <span
+              className={`grid h-10 w-10 place-items-center rounded-full text-xl ${
+                correct ? "bg-green text-white" : "bg-cardinal text-white"
+              }`}
+            >
+              {correct ? "✓" : "✕"}
+            </span>
+            <div>
+              <p className={`text-base font-extrabold ${correct ? "text-green-dark" : "text-cardinal-dark"}`}>
+                {correct ? "Nice! That's right." : "Not quite"}
+              </p>
+              <p className={`text-sm font-bold ${correct ? "text-green-dark" : "text-cardinal-dark"}`}>
+                {correct ? `${answer?.toUpperCase()} — well read.` : `That was ${answer?.toUpperCase()}.`}
+              </p>
+            </div>
+          </div>
+          <button onClick={() => void next()} className={`btn3d ${correct ? "btn-green" : "btn-red"}`}>
+            Continue
+          </button>
+        </div>
+      )}
     </div>
   );
 }

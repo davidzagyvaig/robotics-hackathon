@@ -15,15 +15,13 @@ export default function ConnectDevice() {
     const mode = simulated ? "On screen" : transport === "ble" ? "Bluetooth" : "USB";
     return (
       <div className="flex flex-col items-center gap-2">
-        <div className="flex items-center gap-2 rounded-full border border-saffron/40 bg-saffron/10 px-4 py-1.5 text-sm text-saffronDeep">
-          <span className="h-2 w-2 rounded-full bg-saffron" />
-          {simulated ? "On-screen cell" : (deviceName?.replace(/\s*v\d+$/, "") ?? "BrailleBuddy")} connected
-          <span className="text-saffron/60">·</span>
-          <span className="font-mono text-xs">{mode}</span>
+        <div className="flex items-center gap-2 rounded-full border-2 border-green bg-green-light px-4 py-1.5 text-sm font-extrabold text-green-dark">
+          <span className="h-2.5 w-2.5 rounded-full bg-green" />
+          {simulated ? "On-screen cell" : (deviceName?.replace(/\s*v\d+$/, "") ?? "BrailleBuddy")} · {mode}
         </div>
         <button
           onClick={() => void controller.disconnect()}
-          className="text-[11px] text-muted underline-offset-2 transition hover:text-ink hover:underline"
+          className="text-xs font-bold text-hare transition hover:text-wolf"
         >
           {simulated ? "exit on-screen mode" : "disconnect"}
         </button>
@@ -34,43 +32,42 @@ export default function ConnectDevice() {
   const none = !usbSupported && !bleSupported;
 
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-col items-center gap-3">
       <div className="flex flex-wrap items-center justify-center gap-3">
         {usbSupported && (
           <button
             onClick={() => void controller.connect("usb")}
             disabled={connecting}
-            className="rounded-full bg-ink px-6 py-3 text-sm font-semibold text-bone shadow-card transition hover:bg-ink2 disabled:opacity-60"
+            className="btn3d btn-blue text-sm"
           >
-            {connecting ? "Connecting…" : "Connect via USB"}
+            {connecting ? "Connecting…" : "Connect USB"}
           </button>
         )}
         {bleSupported && (
           <button
             onClick={() => void controller.connect("ble")}
             disabled={connecting}
-            className="rounded-full border border-ink/20 bg-paper px-6 py-3 text-sm font-semibold text-ink transition hover:border-ink/40 disabled:opacity-60"
+            className="btn-white px-5 py-3 text-sm uppercase"
           >
-            {connecting ? "Connecting…" : "Connect via Bluetooth"}
+            {connecting ? "Connecting…" : "Bluetooth"}
           </button>
         )}
       </div>
 
-      {/* Always available: run the whole tutor with the on-screen cell, no device needed. */}
       <button
         onClick={() => controller.connectSimulated()}
-        className="font-mono text-xs uppercase tracking-[0.18em] text-muted underline-offset-4 transition hover:text-saffronDeep hover:underline"
+        className="text-xs font-extrabold uppercase tracking-wide text-hare transition hover:text-green-dark"
       >
         try it on screen — no device needed →
       </button>
 
       {none && (
-        <div className="max-w-xs text-center text-[11px] text-muted">
-          No device link in this browser — that&apos;s fine, on-screen mode works everywhere. For
-          real dots, use Chrome or Edge (USB) or Chrome on Android (Bluetooth).
-        </div>
+        <p className="max-w-xs text-center text-xs font-bold text-wolf">
+          On-screen mode works everywhere. For real dots, use Chrome/Edge (USB) or Chrome on
+          Android (Bluetooth).
+        </p>
       )}
-      {error && <div className="max-w-xs text-center text-[11px] text-clay">{error}</div>}
+      {error && <p className="max-w-xs text-center text-xs font-bold text-cardinal">{error}</p>}
     </div>
   );
 }

@@ -1,8 +1,7 @@
 "use client";
 
-// A tiny 2×3 braille glyph used in the word strip. `bits` is the 6-char dot string
-// (order 1..6). `active` highlights the letter currently on the big cell.
-const GRID = [0, 3, 1, 4, 2, 5]; // visual order → dot index
+// Small braille glyph for the word strip. `active` = the letter currently on the big cell.
+const GRID = [0, 3, 1, 4, 2, 5];
 
 export default function MiniCell({
   bits,
@@ -16,8 +15,8 @@ export default function MiniCell({
   return (
     <div className="flex flex-col items-center gap-1.5">
       <div
-        className={`rounded-lg border px-2 py-1.5 transition ${
-          active ? "border-saffron bg-saffron/10" : "border-line bg-paper"
+        className={`rounded-xl border-2 px-2 py-2 transition ${
+          active ? "border-green bg-green-light" : "border-swan bg-white"
         }`}
       >
         <div className="grid grid-cols-2 gap-[3px]">
@@ -26,17 +25,13 @@ export default function MiniCell({
             return (
               <span
                 key={i}
-                className={`h-2 w-2 rounded-full ${
-                  up ? (active ? "bg-saffron" : "bg-ink") : "bg-line"
-                }`}
+                className={`h-2.5 w-2.5 rounded-full ${up ? (active ? "bg-green" : "bg-eel") : "bg-swan"}`}
               />
             );
           })}
         </div>
       </div>
-      <span
-        className={`font-mono text-xs ${active ? "font-semibold text-saffronDeep" : "text-muted"}`}
-      >
+      <span className={`text-sm font-extrabold ${active ? "text-green-dark" : "text-hare"}`}>
         {label}
       </span>
     </div>

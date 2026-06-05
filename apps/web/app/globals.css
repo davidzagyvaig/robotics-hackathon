@@ -2,7 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Font var here (NOT an inline <style> in <head>) so server/client markup matches. */
 :root {
+  --font-sans: "Baloo 2", system-ui, -apple-system, sans-serif;
   color-scheme: light;
 }
 
@@ -10,50 +12,107 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  background-color: #f4eee1;
-  color: #211a15;
+  background: #f2eadb; /* warm bone */
+  color: #2c2218; /* ink */
+  font-family: var(--font-sans);
+  font-weight: 600;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
 }
 
 * {
   box-sizing: border-box;
 }
 
-/* Warm paper atmosphere: a soft radial warmth + a faint film grain over everything. */
-.paper-bg {
-  position: relative;
-  background-color: #f4eee1;
-  background-image:
-    radial-gradient(120% 90% at 50% -10%, rgba(224, 150, 42, 0.14), transparent 60%),
-    radial-gradient(80% 70% at 85% 110%, rgba(182, 85, 47, 0.08), transparent 55%);
-}
-.grain::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 50;
-  opacity: 0.05;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
 ::selection {
-  background: rgba(224, 150, 42, 0.28);
+  background: #e9eac8;
 }
 
 ::-webkit-scrollbar {
-  width: 9px;
-  height: 9px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #dccfb8;
-  border-radius: 5px;
+  background: #e0d3bb;
+  border-radius: 6px;
 }
 
-/* numerals + small caps feel for the technical labels */
-.tnum {
-  font-variant-numeric: tabular-nums;
+@layer components {
+  /* Chunky 3D button: a solid bottom "edge" that compresses on press. */
+  .btn3d {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 font-extrabold uppercase tracking-wide text-white transition-all duration-75 select-none;
+    border: none;
+    cursor: pointer;
+  }
+  .btn3d:active {
+    transform: translateY(2px);
+  }
+  .btn3d:disabled {
+    @apply cursor-default opacity-60;
+  }
+
+  .btn-green {
+    background: #7fa03f;
+    box-shadow: 0 4px 0 #5f7b26;
+  }
+  .btn-green:active {
+    box-shadow: 0 2px 0 #5f7b26;
+  }
+  .btn-blue {
+    background: #a87c4f;
+    box-shadow: 0 4px 0 #87603a;
+  }
+  .btn-blue:active {
+    box-shadow: 0 2px 0 #87603a;
+  }
+  .btn-red {
+    background: #c25a2e;
+    box-shadow: 0 4px 0 #9c4522;
+  }
+  .btn-red:active {
+    box-shadow: 0 2px 0 #9c4522;
+  }
+  .btn-gold {
+    background: #e0962a;
+    color: #2c2218;
+    box-shadow: 0 4px 0 #b9711a;
+  }
+  .btn-gold:active {
+    box-shadow: 0 2px 0 #b9711a;
+  }
+  /* Soft/secondary button — warm paper with a beige edge */
+  .btn-white {
+    @apply rounded-2xl bg-white font-extrabold uppercase tracking-wide text-eel transition-all duration-75 select-none;
+    border: 2px solid #e0d3bb;
+    border-bottom-width: 4px;
+    cursor: pointer;
+  }
+  .btn-white:active {
+    transform: translateY(2px);
+    border-bottom-width: 2px;
+  }
+
+  /* Card: warm paper, beige border + thicker bottom edge */
+  .card3d {
+    @apply rounded-2xl bg-white;
+    border: 2px solid #e0d3bb;
+    border-bottom-width: 4px;
+  }
+
+  /* Rounded pill progress bar */
+  .progress {
+    @apply relative h-4 w-full overflow-hidden rounded-full;
+    background: #e0d3bb;
+  }
+  .progress > span {
+    @apply absolute left-0 top-0 h-full rounded-full;
+    background: #7fa03f;
+    transition: width 400ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .progress > span::after {
+    content: "";
+    @apply absolute left-1.5 right-1.5 top-[3px] h-1 rounded-full;
+    background: rgba(255, 255, 255, 0.45);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -61,7 +120,6 @@ body {
   *::before,
   *::after {
     animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
 }

@@ -2,71 +2,62 @@
 
 import { useBrailleState } from "@/lib/controller";
 
-// The hero: a tactile braille cell. Lowered dots are recessed wells in the paper;
-// raised dots fill with warm saffron and physically pop up. It mirrors exactly what
-// the device (or the on-screen no-hardware mode) is showing — driven by real
-// render_braille calls, never a separate simulator.
+// The braille cell — six dots, recessed holes that fill green and pop up. Mirrors the
+// device (or on-screen mode) exactly; driven by real render_braille / render_word calls.
 //
-// Visual position → braille dot index (0-based), dot order 1..6:
-//   1 4        dot1(0) dot4(3)
-//   2 5   ->   dot2(1) dot5(4)
-//   3 6        dot3(2) dot6(5)
+// Visual position → braille dot index (0-based), dot order 1..6:  1 4 / 2 5 / 3 6
 const GRID: number[] = [0, 3, 1, 4, 2, 5];
 
-const RAISED_FILL =
-  "radial-gradient(circle at 36% 30%, #FAD79A 0%, #E8A23B 42%, #C77E1E 78%, #A96A16 100%)";
+// warm saffron/amber raised dots on beige
+const RAISED =
+  "radial-gradient(circle at 38% 30%, #F6C879 0%, #E0962A 52%, #B9711A 100%)";
 
 export default function BrailleCell({ hideLabel = false }: { hideLabel?: boolean }) {
-  const { currentCell, currentLabel, busy, simulated } = useBrailleState();
+  const { currentCell, currentLabel, busy } = useBrailleState();
   const label = hideLabel ? null : currentLabel;
 
   return (
-    <div className="flex flex-col items-center gap-6">
+    <div className="flex flex-col items-center gap-5">
       <div className="relative">
-        {/* warm glow behind the cell when active */}
         <div
-          className={`pointer-events-none absolute -inset-6 rounded-[2.5rem] blur-2xl transition-opacity duration-500 ${
-            busy ? "opacity-70" : "opacity-0"
+          className={`pointer-events-none absolute -inset-6 rounded-[2.5rem] blur-2xl transition-opacity duration-300 ${
+            busy ? "opacity-60" : "opacity-0"
           }`}
-          style={{ background: "radial-gradient(circle, rgba(224,150,42,0.45), transparent 70%)" }}
+          style={{ background: "radial-gradient(circle, rgba(88,204,2,0.45), transparent 70%)" }}
         />
-        <div className="relative rounded-[2rem] border border-line bg-paper px-10 py-9 shadow-card">
+        <div className="card3d relative px-9 py-8" style={{ borderRadius: 28 }}>
           <div className="grid grid-cols-2 gap-x-9 gap-y-6">
             {GRID.map((dotIndex, i) => {
               const up = currentCell[dotIndex] === "1";
-              return (
-                <div
-                  key={i}
-                  aria-label={`dot ${dotIndex + 1} ${up ? "raised" : "lowered"}`}
-                  className="grid h-14 w-14 place-items-center rounded-full"
-                  style={{ background: up ? "transparent" : "#E7DCC6", boxShadow: up ? "none" : undefined }}
-                >
-                  {up ? (
-                    <span
-                      key={`up-${currentLabel}-${i}`}
-                      className="h-14 w-14 animate-rise rounded-full shadow-dot"
-                      style={{ background: RAISED_FILL }}
-                    />
-                  ) : (
-                    <span className="h-14 w-14 rounded-full bg-[#E7DCC6] shadow-hole" />
-                  )}
-                </div>
+              return up ? (
+                <span
+                  key={`${i}-up-${currentLabel ?? ""}`}
+                  aria-label={`dot ${dotIndex + 1} raised`}
+                  className="h-14 w-14 animate-pop rounded-full"
+                  style={{ background: RAISED, boxShadow: "0 5px 0 #9c5e12" }}
+                />
+              ) : (
+                <span
+                  key={`${i}-down`}
+                  aria-label={`dot ${dotIndex + 1} lowered`}
+                  className="h-14 w-14 rounded-full bg-polar"
+                  style={{ boxShadow: "inset 0 3px 6px rgba(60,60,60,0.18)" }}
+                />
               );
             })}
           </div>
         </div>
       </div>
 
-      {/* the letter being shown, in the display serif */}
-      <div className="flex h-12 items-center gap-3">
+      <div className="flex h-14 items-center">
         {label ? (
-          <span className="font-display text-5xl font-semibold leading-none text-ink">{label}</span>
-        ) : hideLabel ? (
-          <span className="font-display text-5xl font-semibold leading-none text-muted/40">?</span>
-        ) : (
-          <span className="font-mono text-xs uppercase tracking-[0.25em] text-muted">
-            {simulated ? "on-screen cell · ready" : "ready"}
+          <span className="animate-bounceIn text-6xl font-extrabold leading-none text-eel">
+            {label}
           </span>
+        ) : hideLabel ? (
+          <span className="text-6xl font-extrabold leading-none text-swan">?</span>
+        ) : (
+          <span className="text-sm font-extrabold uppercase tracking-wide text-hare">ready</span>
         )}
       </div>
     </div>

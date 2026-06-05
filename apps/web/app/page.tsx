@@ -7,48 +7,37 @@ import LessonStage from "@/components/LessonStage";
 import Quiz from "@/components/Quiz";
 import { controller } from "@/lib/controller";
 import { useProfile } from "@/lib/progress";
-import { MAX_LEVEL } from "@/lib/curriculum";
 
-// small braille wordmark dot-grid (motif only)
 function DotMark() {
   const on = [1, 0, 1, 1, 1, 0];
   return (
     <div className="grid grid-cols-2 gap-[3px]" aria-hidden>
       {[0, 3, 1, 4, 2, 5].map((d, i) => (
-        <span key={i} className={`h-[5px] w-[5px] rounded-full ${on[i] ? "bg-saffron" : "bg-line"}`} />
+        <span key={i} className={`h-2 w-2 rounded-full ${on[i] ? "bg-green" : "bg-swan"}`} />
       ))}
     </div>
   );
 }
 
-function ProfileChip() {
+function TopStats() {
   const p = useProfile();
   return (
-    <div className="flex items-center gap-3">
-      <a
-        href="/learners"
-        className="hidden font-mono text-[11px] uppercase tracking-[0.2em] text-muted transition hover:text-ink sm:inline"
-      >
-        learners
+    <div className="flex items-center gap-4">
+      <a href="/learners" className="hidden text-sm font-extrabold text-wolf transition hover:text-eel sm:block">
+        Learners
       </a>
-      <div className="hidden items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 sm:flex">
-        <span className="grid h-5 w-5 place-items-center rounded-full bg-saffron/20 font-display text-[11px] font-semibold text-saffronDeep">
+      <span className="flex items-center gap-1.5 text-base font-extrabold text-fire" title="day streak">
+        🔥 {p.streak}
+      </span>
+      <span className="flex items-center gap-1.5 text-base font-extrabold text-gold" title="letters mastered">
+        ⭐ {p.mastered.length}
+      </span>
+      <span className="hidden items-center gap-1.5 rounded-full border-2 border-swan bg-white px-3 py-1 text-sm font-extrabold text-eel sm:flex">
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-green-light text-xs text-green-dark">
           {(p.name?.[0] ?? "?").toUpperCase()}
         </span>
-        <span className="text-xs font-medium text-ink">{p.name ?? "Guest"}</span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
-          Lv {p.level}/{MAX_LEVEL}
-        </span>
-        {p.streak > 0 && <span className="font-mono text-[10px] text-clay">🔥{p.streak}</span>}
-      </div>
-      <a
-        href="https://github.com/davidzagyvaig/robotics-hackathon"
-        target="_blank"
-        rel="noreferrer"
-        className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted transition hover:text-ink"
-      >
-        github ↗
-      </a>
+        {p.name ?? "Guest"}
+      </span>
     </div>
   );
 }
@@ -57,42 +46,37 @@ export default function Page() {
   const [mode, setMode] = useState<"learn" | "quiz">("learn");
   const convRef = useRef<ConversationHandle>(null);
 
-  // Disability mode: the physical button on the device (firmware "TOUCH 1") starts the
-  // voice agent hands-free. Sighted users just open the app and use the dashboard normally.
+  // Disability mode: the physical device button (firmware "TOUCH 1") starts the voice
+  // agent hands-free. Sighted users just open the app and use the dashboard normally.
   useEffect(() => controller.onDeviceButton(() => convRef.current?.start()), []);
 
   return (
     <ConversationProvider>
-      <main className="paper-bg grain flex h-screen flex-col text-ink">
-        {/* header */}
-        <header className="flex shrink-0 items-center justify-between border-b border-line/70 px-6 py-4 sm:px-8">
-          <div className="flex items-center gap-3">
+      <main className="flex h-screen flex-col bg-white text-eel">
+        {/* top bar */}
+        <header className="flex shrink-0 items-center justify-between border-b-2 border-swan px-5 py-3 sm:px-8">
+          <div className="flex items-center gap-2.5">
             <DotMark />
-            <div className="leading-tight">
-              <span className="font-display text-lg font-semibold tracking-tight">BrailleBuddy</span>
-              <span className="ml-2 hidden font-mono text-[10px] uppercase tracking-[0.22em] text-muted sm:inline">
-                feel your way into reading
-              </span>
-            </div>
+            <span className="text-xl font-extrabold tracking-tight text-green">BrailleBuddy</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <button
               onClick={() => convRef.current?.start()}
-              className="rounded-full bg-saffron px-4 py-2 text-xs font-semibold text-ink shadow-card transition hover:bg-saffronDeep hover:text-bone"
+              className="btn3d btn-green text-xs"
               aria-label="Start hands-free voice mode — close your eyes and let Dot guide you"
             >
-              🎧 Hands-free voice mode
+              🎧 Hands-free
             </button>
-            <ProfileChip />
+            <TopStats />
           </div>
         </header>
 
-        {/* two-pane: agent (left) | simulation (right) */}
+        {/* two-pane: tutor (left) | cell (right) */}
         <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-2">
-          <section className="flex min-h-0 flex-col border-b border-line md:border-b-0 md:border-r">
-            <div className="flex items-center gap-2 px-5 pt-4">
-              <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted">
-                ① your tutor
+          <section className="flex min-h-0 flex-col border-b-2 border-swan md:border-b-0 md:border-r-2">
+            <div className="px-5 pt-4">
+              <span className="text-xs font-extrabold uppercase tracking-wide text-hare">
+                ① Your coach
               </span>
             </div>
             <div className="min-h-0 flex-1">
@@ -100,18 +84,18 @@ export default function Page() {
             </div>
           </section>
 
-          <section className="flex min-h-0 flex-col bg-bone2/40">
+          <section className="flex min-h-0 flex-col bg-polar">
             <div className="flex items-center justify-between px-5 pt-4">
-              <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted">
-                ② the cell
+              <span className="text-xs font-extrabold uppercase tracking-wide text-hare">
+                ② The cell
               </span>
-              <div className="flex rounded-full border border-line bg-paper p-0.5 text-[11px]">
+              <div className="flex gap-1 rounded-full border-2 border-swan bg-white p-1">
                 {(["learn", "quiz"] as const).map((m) => (
                   <button
                     key={m}
                     onClick={() => setMode(m)}
-                    className={`rounded-full px-3 py-1 font-mono uppercase tracking-[0.12em] transition ${
-                      mode === m ? "bg-ink text-bone" : "text-muted hover:text-ink"
+                    className={`rounded-full px-4 py-1 text-xs font-extrabold uppercase tracking-wide transition ${
+                      mode === m ? "bg-green text-white" : "text-hare hover:text-eel"
                     }`}
                   >
                     {m}

@@ -6,51 +6,53 @@ import MiniCell from "@/components/MiniCell";
 import { controller, useBrailleState } from "@/lib/controller";
 import { useProfile } from "@/lib/progress";
 import { textToCells } from "@/lib/braille";
-import { lessonByLevel, MAX_LEVEL } from "@/lib/curriculum";
+import { lessonByLevel, lettersThroughLevel, MAX_LEVEL } from "@/lib/curriculum";
 
-// The RIGHT pane: the physical-cell simulation. The big tactile cell mirrors the device
-// (or on-screen mode); when a word is being read, a strip of mini-cells shows the whole
-// word with the active letter highlighted, and the word text underneath. A level rail
-// shows where the learner is.
-
+// RIGHT pane: the cell simulation. Big cell mirrors the device; a word strip shows the
+// current word with the active letter highlighted; a level bar shows progress.
 export default function LessonStage() {
   const { currentWord, wordIndex, demoCaption, demoRunning } = useBrailleState();
   const profile = useProfile();
   const lesson = lessonByLevel(profile.level);
-
   const cells = currentWord ? textToCells(currentWord) : [];
+
+  const target = lettersThroughLevel(profile.level).length || 1;
+  const got = profile.mastered.length;
+  const pct = Math.min(100, Math.round((got / Math.max(target, 1)) * 100));
 
   return (
     <div className="flex h-full flex-col">
-      {/* level rail */}
-      <div className="flex items-center justify-between border-b border-line px-5 py-4">
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-saffronDeep">
-            Level {profile.level}
-            <span className="text-muted">/{MAX_LEVEL}</span>
-          </span>
-          <span className="text-sm font-medium text-ink">{lesson?.title ?? "—"}</span>
-        </div>
-        <div className="flex items-center gap-4 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
-          <span>{profile.mastered.length} letters</span>
-          {profile.streak > 0 && <span className="text-clay">🔥 {profile.streak}d</span>}
+      {/* level bar */}
+      <div className="flex items-center gap-3 px-6 pt-5">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gold text-sm font-extrabold text-white shadow-[0_3px_0_#E5A600]">
+          {profile.level}
+        </span>
+        <div className="flex-1">
+          <div className="mb-1 flex items-baseline justify-between">
+            <span className="text-sm font-extrabold text-eel">{lesson?.title ?? "Lesson"}</span>
+            <span className="text-xs font-extrabold text-hare">
+              Lv {profile.level}/{MAX_LEVEL}
+            </span>
+          </div>
+          <div className="progress">
+            <span style={{ width: `${pct}%` }} />
+          </div>
         </div>
       </div>
 
-      {/* the cell + word strip */}
-      <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6 py-8">
-        {/* demo caption (no-key preview narration) */}
-        <div className="h-5">
+      {/* cell + word strip */}
+      <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-6">
+        <div className="h-6">
           {demoCaption && (
-            <p className="animate-floatUp text-center text-sm italic text-saffronDeep">
-              “{demoCaption}”
+            <p className="animate-bounceIn text-center text-base font-extrabold text-green-dark">
+              {demoCaption}
             </p>
           )}
         </div>
 
         <BrailleCell />
 
-        <div className="min-h-[84px] w-full max-w-md">
+        <div className="min-h-[92px] w-full max-w-md">
           {currentWord ? (
             <div className="flex flex-col items-center gap-3">
               <div className="flex flex-wrap items-end justify-center gap-2.5">
@@ -58,18 +60,14 @@ export default function LessonStage() {
                   <MiniCell key={i} bits={c.bits} label={c.label} active={i === wordIndex} />
                 ))}
               </div>
-              <p className="font-display text-2xl tracking-wide text-ink">
-                {currentWord}
-              </p>
+              <p className="text-3xl font-extrabold lowercase tracking-wide text-eel">{currentWord}</p>
             </div>
           ) : (
             <div className="text-center">
-              <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
-                now learning
-              </p>
-              <p className="mt-1 font-display text-xl text-ink2">{lesson?.kicker ?? ""}</p>
+              <p className="text-xs font-extrabold uppercase tracking-wide text-hare">now learning</p>
+              <p className="mt-1 text-2xl font-extrabold text-eel">{lesson?.kicker ?? ""}</p>
               {lesson?.note && (
-                <p className="mx-auto mt-2 max-w-xs text-[13px] leading-relaxed text-muted">
+                <p className="mx-auto mt-2 max-w-xs text-sm font-bold leading-relaxed text-wolf">
                   {lesson.note}
                 </p>
               )}
@@ -78,13 +76,13 @@ export default function LessonStage() {
         </div>
       </div>
 
-      {/* watch-demo (works with no voice key) + device / sim status */}
-      <div className="flex flex-col items-center gap-3 border-t border-line px-5 py-4">
+      {/* watch-demo (no key needed) + device status */}
+      <div className="flex flex-col items-center gap-3 border-t-2 border-swan px-5 py-4">
         <button
           onClick={() => (demoRunning ? controller.stopDemo() : void controller.runDemo())}
-          className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink2 underline-offset-4 transition hover:text-saffronDeep hover:underline"
+          className="text-sm font-extrabold uppercase tracking-wide text-blue transition hover:text-blue-dark"
         >
-          {demoRunning ? "■ stop demo" : "▶ watch a 20-second demo"}
+          {demoRunning ? "■ Stop demo" : "▶ Watch a 20-second demo"}
         </button>
         <ConnectDevice />
       </div>
