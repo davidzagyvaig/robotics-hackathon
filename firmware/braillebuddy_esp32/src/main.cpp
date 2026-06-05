@@ -1,31 +1,28 @@
 /*
  * ============================================================================
- *  BrailleBuddy firmware (full) — ESP32-S3
+ *  BrailleBuddy firmware — ESP32-S3
  * ============================================================================
- *  ONE self-contained sketch. Drop-in upgrade for src/main.cpp.
+ *  ONE self-contained sketch.
  *
  *  HOW TO FLASH
- *    - Arduino IDE: open this file directly (board = "ESP32S3 Dev Module",
+ *    - Arduino IDE: open this file (board = "ESP32S3 Dev Module",
  *      USB CDC On Boot = Enabled), then Upload.
- *    - PlatformIO: replace the contents of src/main.cpp with this file
- *      (PlatformIO only compiles files under src/). platformio.ini already
- *      has -DARDUINO_USB_CDC_ON_BOOT=1 and the ESP32Servo lib, which is all
- *      this needs — BLE is part of the arduino-esp32 core, no extra lib_deps.
+ *    - PlatformIO: this IS src/main.cpp. platformio.ini already has
+ *      -DARDUINO_USB_CDC_ON_BOOT=1 and the ESP32Servo lib; BLE is part of the
+ *      arduino-esp32 core, no extra lib_deps.
  *
  *  WHAT IT DOES
  *    - Drives 6 servos, one per braille dot, between a calibratable OFF angle
  *      (dot down/flush) and ON angle (dot raised). On/off only; the SWEEP SPEED
- *      between them is set ONLY by the potentiometer. From that speed the box
- *      computes how long one cell takes to fully change and streams that back
- *      (CHARMS) so the app knows how fast it may send characters.
- *    - Pulses a haptic motor every time a NEW braille cell (letter) is shown.
- *    - Reads a capacitive touch button: single tap and double tap are reported
- *      to the host (TOUCH 1 / TOUCH 2) so the app can read notifications aloud
- *      or step through them one-by-one in braille.
- *    - The 2-prong physical switch is read and reported (SW 0/1) but currently
- *      reserved. The box advertises ONE BLE name ("BrailleBuddy") and accepts a
- *      single connection at a time (USB or BLE), re-advertising on disconnect.
- *    - Talks the SAME line protocol over USB serial AND Bluetooth LE.
+ *      between them is fixed (speedPct). From it the box computes how long one
+ *      cell takes to fully change and streams that back (CHARMS) so the app
+ *      knows how fast it may send characters.
+ *    - Reads ONE push button: single tap and double tap are reported to the host
+ *      (TOUCH 1 / TOUCH 2) so the app can start the tutor hands-free or step
+ *      through items.
+ *    - Talks the SAME line protocol over USB serial (PRIMARY) AND Bluetooth LE
+ *      (legacy/optional). The box advertises ONE BLE name ("BrailleBuddy") and
+ *      accepts a single connection at a time; USB CDC is always available.
  *
  *  Dot / bit order = braille dots 1..6:   1 4 / 2 5 / 3 6
  *  (bit i of the 6-bit frame = dot i+1). e.g. B100000 = dot 1 = "a".
@@ -33,11 +30,10 @@
  *  ---- LINE PROTOCOL (115200 baud over USB; same lines over BLE NUS) ----
  *  HOST -> DEVICE
  *    ID?               identify        -> "BRAILLEBUDDY v2"
- *    B<6 bits>         set cell (+haptic pulse), e.g. B101100
- *    Z                 lower every dot (no haptic)
+ *    B<6 bits>         set cell, e.g. B101100
+ *    Z                 lower every dot
  *    E                 enable / re-attach the servos
  *    D                 relax (detach) servos so they stop buzzing/heating
- *    H                 fire one haptic pulse now (test)
  *    CON <dot> <ang>   calibrate ON angle  of a dot (dot 1-6, ang 0-180)
  *    COFF <dot> <ang>  calibrate OFF angle of a dot (dot 1-6, ang 0-180)
  *    C?                dump current calibration + speed
@@ -45,26 +41,18 @@
  *    BOOT                          firmware started
  *    BRAILLEBUDDY v2               identity (reply to ID?)
  *    OK / ERR PARSE                ack / unknown command
- *    POT <0-4095>      ~10 Hz      raw speed-knob reading (kept for compat)
- *    SPEED <0-100>     ~10 Hz      pot-set switching speed percent
- *    CHARMS <ms>       ~10 Hz      ms for ONE cell to fully change at the current
- *                                  speed = the minimum delay the app should wait
- *                                  between characters (rate = 1000 / CHARMS cps)
- *    TOUCH 1 / TOUCH 2             single / double tap on the touch button
- *    SW 0 / SW 1                   physical toggle switch changed state (reserved)
+ *    SPEED <0-100>     ~10 Hz      fixed sweep-speed percent
+ *    CHARMS <ms>       ~10 Hz      ms for ONE cell to fully change = the minimum
+ *                                  delay the app should wait between characters
+ *    TOUCH 1 / TOUCH 2             single / double tap on the push button
  *
- *  ---- WIRING (the #1 risk is servo power — get it right first) ----
- *    - 6 servos on a DEDICATED 5-6V rail, NOT the ESP 5V/3V3 pin. Common GND
+ *  ---- WIRING ----
+ *    - 6 servos on a DEDICATED 5V rail, NOT the ESP 5V/3V3 pin. Common GND
  *      between that supply and the ESP32-S3. 1000uF cap across the servo rail.
- *    - Haptic motor: its little driver board's IN pin -> HAPTIC_PIN, plus VCC
- *      and GND. We just switch it on/off (digital). Set HAPTIC_ACTIVE_HIGH to
- *      match your driver.
- *    - Capacitive touch module (e.g. TTP223): VCC -> 3V3, GND -> GND,
- *      SIG -> TOUCH_PIN. Set TOUCH_ACTIVE_HIGH to match (TTP223 idles LOW,
- *      goes HIGH on touch -> leave it true).
- *    - Physical 2-prong toggle: one prong -> SWITCH_PIN, other prong -> GND.
- *      We use the internal pull-up, so "closed" reads LOW.
- *    - Potentiometer: outer pins -> 3V3 and GND, wiper -> POT_PIN (ADC1).
+ *    - Push button: one leg -> TOUCH_PIN, the diagonal leg -> 3V3. We use the
+ *      internal pull-down (INPUT_PULLDOWN), so pressed reads HIGH. Use 3V3 ONLY,
+ *      never 5V (ESP32-S3 GPIOs are not 5V-tolerant).
+ *    See firmware/braillebuddy_esp32/circuit.svg and docs/HARDWARE.md.
  * ============================================================================
  */
 
@@ -77,10 +65,7 @@
 
 // ---- Pins (all freely choosable; avoid USB pins 19/20 and strapping 0/3/45/46) ----
 const int SERVO_PINS[6] = {4, 5, 6, 7, 15, 16}; // dots 1..6
-const int POT_PIN       = 1;   // potentiometer wiper -> ADC1 (speed knob)
-const int HAPTIC_PIN    = 17;  // haptic driver IN (on/off)
-const int TOUCH_PIN     = 18;  // capacitive touch module SIG
-const int SWITCH_PIN    = 8;   // 2-prong toggle: other prong to GND
+const int TOUCH_PIN     = 18;  // push-button SIG (the other leg goes to 3V3)
 
 // ---- Per-dot angle calibration (degrees, 0..180). Editable live via CON/COFF. ----
 //  OFF = dot flush/down, ON = dot raised. Tune each dot so down is flush and up
@@ -90,26 +75,19 @@ int ON_ANGLE[6]  = {40, 40, 40, 40, 40, 40};
 
 // ---- Switching-speed calibration ----
 //  speedPct (0..100) is mapped to "degrees moved per servo update". Small step =
-//  slow, smooth sweep; big step = near-instant snap. Tune these to taste — they
-//  define what 0% and 100% physically mean. The live speed comes ONLY from the pot.
+//  slow, smooth sweep; big step = near-instant snap. Tune MIN/MAX to taste — they
+//  define what 0% and 100% physically mean. No pot is fitted, so speedPct is fixed.
 const int   SERVO_UPDATE_MS = 15;  // how often we nudge the servos (~servo frame)
 const float MIN_STEP_DEG    = 1.0; // degrees/update at speed = 0%   (slowest)
 const float MAX_STEP_DEG    = 90.0;// degrees/update at speed = 100% (snap)
-int speedPct = 60;                 // boot default; the pot sets it every cycle
+int speedPct = 60;                 // fixed sweep speed (no pot fitted) — retune here
 
-// ---- Haptic ----
-const bool HAPTIC_ACTIVE_HIGH = true; // flip if your driver turns on with LOW
-const int  HAPTIC_MS          = 60;   // buzz length per new letter
-
-// ---- Capacitive touch ----
-const bool TOUCH_ACTIVE_HIGH  = true; // TTP223 default: HIGH while touched
+// ---- Push button ----
+const bool TOUCH_ACTIVE_HIGH  = true;  // button to 3V3: pressed = HIGH (uses INPUT_PULLDOWN)
 const unsigned long TOUCH_DEBOUNCE_MS = 30;
 const unsigned long DOUBLE_TAP_MS     = 350; // 2nd tap within this = double tap
 
-// ---- Physical switch ----
-const unsigned long SWITCH_DEBOUNCE_MS = 40;
-
-// ---- Bluetooth LE (Nordic UART Service). Set to 0 to build USB-serial only. ----
+// ---- Bluetooth LE (Nordic UART Service). Legacy/optional — set to 0 for USB-serial only. ----
 #define USE_BLE 1
 //  The box advertises ONE name and accepts a single connection at a time (USB or
 //  BLE). On disconnect it re-advertises so the next host can connect.
@@ -213,9 +191,6 @@ void attachAll() {
   }
 }
 
-// Set which dots are up; `buzz` fires the haptic (true only for real letters).
-void applyCell(uint8_t bits, bool buzz);
-
 void updateServos() {
   static unsigned long last = 0;
   unsigned long now = millis();
@@ -232,32 +207,15 @@ void updateServos() {
   }
 }
 
-// ===========================================================================
-//  Haptic motor (non-blocking pulse)
-// ===========================================================================
-unsigned long hapticOffAt = 0;
-
-void hapticWrite(bool on) {
-  digitalWrite(HAPTIC_PIN, (on == HAPTIC_ACTIVE_HIGH) ? HIGH : LOW);
-}
-void hapticPulse() { hapticWrite(true); hapticOffAt = millis() + HAPTIC_MS; }
-void updateHaptic() {
-  if (hapticOffAt && (long)(millis() - hapticOffAt) >= 0) {
-    hapticWrite(false);
-    hapticOffAt = 0;
-  }
-}
-
-void applyCell(uint8_t bits, bool buzz) {
+// Set which dots are up; updateServos() sweeps to the new target (nothing blocking).
+void applyCell(uint8_t bits) {
   curBits = bits;
-  if (buzz) hapticPulse(); // new letter -> a little nudge
-  // updateServos() will sweep to the new target; nothing blocking here.
 }
 
 // ===========================================================================
-//  Capacitive touch — single vs double tap
+//  Push button — single vs double tap
 // ===========================================================================
-bool          touchStable = false;       // debounced "is touched"
+bool          touchStable = false;       // debounced "is pressed"
 bool          touchRaw    = false;
 unsigned long touchEdgeAt = 0;
 bool          awaitingSecondTap = false;
@@ -287,31 +245,14 @@ void updateTouch() {
 }
 
 // ===========================================================================
-//  Physical 2-prong switch
-// ===========================================================================
-int           swStable = -1;     // -1 = unknown at boot
-int           swRaw     = -1;
-unsigned long swEdgeAt  = 0;
-
-void updateSwitch() {
-  unsigned long now = millis();
-  int raw = (digitalRead(SWITCH_PIN) == LOW) ? 1 : 0; // pull-up: closed = LOW = 1
-  if (raw != swRaw) { swRaw = raw; swEdgeAt = now; }
-  if (now - swEdgeAt >= SWITCH_DEBOUNCE_MS && raw != swStable) {
-    swStable = raw;
-    sendLine(String("SW ") + swStable);   // reported but currently reserved
-  }
-}
-
-// ===========================================================================
-//  Potentiometer -> speed, and the resulting per-cell timing for the app.
+//  Sweep timing telemetry: how long one cell takes, streamed to the app.
 // ===========================================================================
 
 // How long ONE cell takes to fully change at the current speed. The slowest dot
 // is the one with the biggest OFF<->ON span; updateServos() moves it in
 // ceil(span/step) updates, each SERVO_UPDATE_MS long. So this number is exactly
 // the settle time the app must wait before sending the next character. It tracks
-// both the pot (via step) and your angle calibration (via span) automatically.
+// your angle calibration (via span) and the fixed speed (via step).
 int cellChangeMs() {
   int maxSpan = 1;
   for (int i = 0; i < 6; i++) {
@@ -326,15 +267,13 @@ int cellChangeMs() {
   return updates * SERVO_UPDATE_MS;
 }
 
-void updatePotAndSpeed() {
+void updateSpeedTelemetry() {
   static unsigned long lastMs = 0;
   unsigned long now = millis();
   if (now - lastMs < 100) return; // ~10 Hz
   lastMs = now;
-  int raw = analogRead(POT_PIN);
-  speedPct = (int)((raw / 4095.0f) * 100.0f); // the pot is the ONLY speed control
-  sendLine(String("POT ") + raw);             // raw knob value (kept for compat)
-  sendLine(String("SPEED ") + speedPct);      // switching speed percent
+  // No pot fitted: speedPct is fixed (retune its initializer up top).
+  sendLine(String("SPEED ") + speedPct);        // fixed sweep-speed percent
   sendLine(String("CHARMS ") + cellChangeMs()); // ms per cell -> app paces sending
 }
 
@@ -365,11 +304,11 @@ void handleLine(String line) {
   char c = line.charAt(0);
 
   if (c == 'B') {
-    applyCell(parseBits(line.substring(1)), true);   // real letter -> haptic
+    applyCell(parseBits(line.substring(1)));
     sendLine("OK");
 
   } else if (c == 'Z') {
-    applyCell(0, false);                             // clear, no haptic
+    applyCell(0);
     sendLine("OK");
 
   } else if (c == 'E') {
@@ -379,10 +318,6 @@ void handleLine(String line) {
   } else if (c == 'D') {
     enabled = false;
     for (int i = 0; i < 6; i++) servos[i].detach();
-    sendLine("OK");
-
-  } else if (c == 'H') {                             // manual haptic test
-    hapticPulse();
     sendLine("OK");
 
   } else if (line.startsWith("CON ") || line.startsWith("COFF ")) {
@@ -418,9 +353,7 @@ void startupWave() {
 void setup() {
   Serial.begin(115200);
 
-  pinMode(HAPTIC_PIN, OUTPUT); hapticWrite(false);
-  pinMode(TOUCH_PIN, TOUCH_ACTIVE_HIGH ? INPUT : INPUT_PULLUP);
-  pinMode(SWITCH_PIN, INPUT_PULLUP);
+  pinMode(TOUCH_PIN, TOUCH_ACTIVE_HIGH ? INPUT_PULLDOWN : INPUT_PULLUP);
 
   ESP32PWM::allocateTimer(0);
   ESP32PWM::allocateTimer(1);
@@ -428,19 +361,15 @@ void setup() {
   ESP32PWM::allocateTimer(3);
   for (int i = 0; i < 6; i++) curAngle[i] = OFF_ANGLE[i];
   attachAll();
-  analogReadResolution(12);
 
-  // Read the switch once at boot (reported as SW; currently reserved).
-  swStable = (digitalRead(SWITCH_PIN) == LOW) ? 1 : 0;
-  swRaw = swStable;
 #if USE_BLE
   startBLE();
 #endif
 
-  applyCell(0, false);
+  applyCell(0);
   delay(200);
   startupWave();
-  applyCell(0, false);
+  applyCell(0);
   sendLine("BOOT");
 }
 
@@ -454,8 +383,6 @@ void loop() {
   }
 
   updateServos();
-  updateHaptic();
   updateTouch();
-  updateSwitch();
-  updatePotAndSpeed();
+  updateSpeedTelemetry();
 }
