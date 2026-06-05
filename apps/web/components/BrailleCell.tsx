@@ -16,8 +16,9 @@ const GRID: number[] = [0, 3, 1, 4, 2, 5];
 const RAISED_FILL =
   "radial-gradient(circle at 36% 30%, #FAD79A 0%, #E8A23B 42%, #C77E1E 78%, #A96A16 100%)";
 
-export default function BrailleCell() {
+export default function BrailleCell({ hideLabel = false }: { hideLabel?: boolean }) {
   const { currentCell, currentLabel, busy, simulated } = useBrailleState();
+  const label = hideLabel ? null : currentLabel;
 
   return (
     <div className="flex flex-col items-center gap-6">
@@ -58,10 +59,10 @@ export default function BrailleCell() {
 
       {/* the letter being shown, in the display serif */}
       <div className="flex h-12 items-center gap-3">
-        {currentLabel ? (
-          <span className="font-display text-5xl font-semibold leading-none text-ink">
-            {currentLabel}
-          </span>
+        {label ? (
+          <span className="font-display text-5xl font-semibold leading-none text-ink">{label}</span>
+        ) : hideLabel ? (
+          <span className="font-display text-5xl font-semibold leading-none text-muted/40">?</span>
         ) : (
           <span className="font-mono text-xs uppercase tracking-[0.25em] text-muted">
             {simulated ? "on-screen cell · ready" : "ready"}

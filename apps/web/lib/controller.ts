@@ -32,6 +32,10 @@ export type BrailleState = {
   /** Index of the active letter within currentWord, or -1. */
   wordIndex: number;
   busy: boolean;
+  /** A teaching caption shown during the no-key "Watch demo" playback. */
+  demoCaption: string | null;
+  /** True while the scripted demo is running. */
+  demoRunning: boolean;
 };
 
 const INITIAL: BrailleState = {
@@ -48,6 +52,8 @@ const INITIAL: BrailleState = {
   currentWord: null,
   wordIndex: -1,
   busy: false,
+  demoCaption: null,
+  demoRunning: false,
 };
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -227,6 +233,63 @@ class BrailleController {
     } catch (e) {
       this.set({ busy: false, currentWord: null, wordIndex: -1 });
       return `The cell isn't responding: ${e instanceof Error ? e.message : "unknown error"}.`;
+    }
+  }
+  /**
+   * A scripted, no-key preview lesson: teaches A, B, C then reads "cat" on the cell with
+   * captions. Lets anyone try the dashboard before the voice agent is wired, and is clean
+   * B-roll for the launch video. Uses on-screen mode if nothing is connected.
+   */
+  async runDemo(): Promise<void> {
+    if (this.state.busy || this.state.demoRunning) return;
+    if (!this.state.connected) this.connectSimulated();
+    this.set({ demoRunning: true });
+    const say = (t: string | null) => this.set({ demoCaption: t });
+    const steps: Array<() => Promise<unknown>> = [
+      () => (say("Let's learn the letter A — just dot one."), this.renderBraille("a", 1.6)),
+      () => (say("Now B — dots one and two."), this.renderBraille("b", 1.6)),
+      () => (say("And C — dots one and four."), this.renderBraille("c", 1.6)),
+      () => (say("Now feel a whole word, one letter at a time…"), delay(900)),
+      () => this.renderWord("cat", 1.2),
+      () => (say("That spelled “cat.” You just read braille. 🎉"), delay(1800)),
+    ];
+    try {
+      for (const step of steps) {
+        if (!this.state.demoRunning) break; // allow cancel
+        await step();
+      }
+    } finally {
+      this.set({ demoRunning: false, demoCaption: null });
+    }
+  }
+
+  stopDemo(): void {
+    this.set({ demoRunning: false, demoCaption: null });
+  }
+
+  /** Raise a letter and HOLD it (no auto-clear) — used by Quiz mode for "what is this?". */
+  async showLetter(character: string): Promise<boolean> {
+    if (!this.state.connected) return false;
+    const ch = (character ?? "").trim()[0];
+    if (!ch) return false;
+    const bits = charToBits(ch);
+    if (!bits) return false;
+    this.set({ currentCell: bits, currentLabel: ch.toUpperCase() });
+    try {
+      if (this.transport) await this.transport.send(`B${bits}`);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Drop every dot and clear the label. */
+  async clear(): Promise<void> {
+    this.set({ currentCell: CELL_DOWN, currentLabel: null });
+    try {
+      if (this.transport) await this.transport.send("Z");
+    } catch {
+      /* ignore */
     }
   }
 }

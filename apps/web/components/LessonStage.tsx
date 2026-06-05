@@ -3,7 +3,7 @@
 import BrailleCell from "@/components/BrailleCell";
 import ConnectDevice from "@/components/ConnectDevice";
 import MiniCell from "@/components/MiniCell";
-import { useBrailleState } from "@/lib/controller";
+import { controller, useBrailleState } from "@/lib/controller";
 import { useProfile } from "@/lib/progress";
 import { textToCells } from "@/lib/braille";
 import { lessonByLevel, MAX_LEVEL } from "@/lib/curriculum";
@@ -14,7 +14,7 @@ import { lessonByLevel, MAX_LEVEL } from "@/lib/curriculum";
 // shows where the learner is.
 
 export default function LessonStage() {
-  const { currentWord, wordIndex } = useBrailleState();
+  const { currentWord, wordIndex, demoCaption, demoRunning } = useBrailleState();
   const profile = useProfile();
   const lesson = lessonByLevel(profile.level);
 
@@ -38,7 +38,16 @@ export default function LessonStage() {
       </div>
 
       {/* the cell + word strip */}
-      <div className="flex flex-1 flex-col items-center justify-center gap-10 px-6 py-8">
+      <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6 py-8">
+        {/* demo caption (no-key preview narration) */}
+        <div className="h-5">
+          {demoCaption && (
+            <p className="animate-floatUp text-center text-sm italic text-saffronDeep">
+              “{demoCaption}”
+            </p>
+          )}
+        </div>
+
         <BrailleCell />
 
         <div className="min-h-[84px] w-full max-w-md">
@@ -69,8 +78,14 @@ export default function LessonStage() {
         </div>
       </div>
 
-      {/* device / sim status */}
-      <div className="border-t border-line px-5 py-4">
+      {/* watch-demo (works with no voice key) + device / sim status */}
+      <div className="flex flex-col items-center gap-3 border-t border-line px-5 py-4">
+        <button
+          onClick={() => (demoRunning ? controller.stopDemo() : void controller.runDemo())}
+          className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink2 underline-offset-4 transition hover:text-saffronDeep hover:underline"
+        >
+          {demoRunning ? "■ stop demo" : "▶ watch a 20-second demo"}
+        </button>
         <ConnectDevice />
       </div>
     </div>
