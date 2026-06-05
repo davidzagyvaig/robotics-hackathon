@@ -27,7 +27,7 @@ const config: Config = {
         swan: "#E0D3BB",
       },
       fontFamily: {
-        sans: ["var(--font-sans)", "Baloo 2", "system-ui", "sans-serif"],
+        sans: ["var(--font-sans)", "Fredoka", "system-ui", "sans-serif"],
       },
       borderRadius: { xl: "16px", "2xl": "20px", "3xl": "28px" },
       keyframes: {

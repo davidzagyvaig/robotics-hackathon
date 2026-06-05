@@ -15,8 +15,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        {/* Fredoka — closest free match to Duolingo's proprietary "Feather Bold"
+            (rounded, friendly, geometric). Swap to a licensed Feather Bold via @font-face
+            in globals.css if you have the file. */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
       </head>

@@ -4,7 +4,9 @@
 
 /* Font var here (NOT an inline <style> in <head>) so server/client markup matches. */
 :root {
-  --font-sans: "Baloo 2", system-ui, -apple-system, sans-serif;
+  /* Fredoka = free stand-in for Duolingo's proprietary Feather Bold. Replace the family
+     here (and add @font-face below) if you have a licensed Feather Bold file. */
+  --font-sans: "Fredoka", system-ui, -apple-system, sans-serif;
   color-scheme: light;
 }
 
