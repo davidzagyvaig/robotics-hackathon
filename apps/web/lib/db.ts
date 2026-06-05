@@ -74,7 +74,12 @@ export function getDb(): Promise<PGlite> {
 }
 
 function normalize(name: string): string {
-  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const s = name.trim().toLowerCase();
+  // Unicode-aware: keep letters/digits from ANY script (handles "Zsömbör", "李明", etc.)
+  const stripped = s.replace(/[^\p{L}\p{N}]+/gu, "");
+  // Emoji-only / symbol-only names strip to empty — fall back to the raw lowercased name
+  // so they still get a stable, unique key instead of crashing.
+  return stripped || s.replace(/\s+/g, " ").trim();
 }
 
 function rid(): string {
@@ -95,31 +100,36 @@ export async function identifyUser(name: string): Promise<{ user: DbUser; isNew:
   const db = await getDb();
   const key = normalize(name);
   if (!key) throw new Error("empty name");
+  const bumpStreakAndReturn = async (uid: string) => {
+    await db.query(
+      `UPDATE users SET
+         streak = CASE
+           WHEN last_seen::date = current_date THEN streak
+           WHEN last_seen::date = current_date - 1 THEN streak + 1
+           ELSE 1 END,
+         last_seen = now()
+       WHERE id = $1`,
+      [uid]
+    );
+    const refreshed = (await db.query<DbUser>("SELECT * FROM users WHERE id=$1", [uid])).rows[0];
+    return { user: { ...refreshed, mastered: await masteredFor(db, uid) }, isNew: false };
+  };
+
   const existing = await db.query<DbUser>("SELECT * FROM users WHERE name_key=$1", [key]);
+  if (existing.rows.length) return bumpStreakAndReturn(existing.rows[0].id);
 
-  if (existing.rows.length) {
-    const u = existing.rows[0];
-    // streak: +1 if last seen on a previous day, reset to 1 if a gap, unchanged same day
-    await db.exec(`
-      UPDATE users SET
-        streak = CASE
-          WHEN last_seen::date = current_date THEN streak
-          WHEN last_seen::date = current_date - 1 THEN streak + 1
-          ELSE 1 END,
-        last_seen = now()
-      WHERE id = '${u.id.replace(/'/g, "")}'
-    `);
-    const refreshed = (await db.query<DbUser>("SELECT * FROM users WHERE id=$1", [u.id])).rows[0];
-    return { user: { ...refreshed, mastered: await masteredFor(db, u.id) }, isNew: false };
-  }
-
+  // Create — but guard the check-then-insert race: two concurrent signups of the same new
+  // name both pass the SELECT above, so the second INSERT hits the UNIQUE(name_key). Use
+  // ON CONFLICT and, if we didn't win, fall back to the existing row.
   const id = rid();
   await db.query(
-    "INSERT INTO users (id, name, name_key) VALUES ($1,$2,$3)",
+    "INSERT INTO users (id, name, name_key) VALUES ($1,$2,$3) ON CONFLICT (name_key) DO NOTHING",
     [id, name.trim(), key]
   );
-  const u = (await db.query<DbUser>("SELECT * FROM users WHERE id=$1", [id])).rows[0];
-  return { user: { ...u, mastered: [] }, isNew: true };
+  const row = (await db.query<DbUser>("SELECT * FROM users WHERE name_key=$1", [key])).rows[0];
+  if (!row) throw new Error("failed to create learner");
+  if (row.id === id) return { user: { ...row, mastered: [] }, isNew: true }; // we created it
+  return bumpStreakAndReturn(row.id); // someone else won the race — use theirs
 }
 
 export async function getUser(id: string): Promise<DbUser | null> {

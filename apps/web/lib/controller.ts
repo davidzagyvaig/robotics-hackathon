@@ -225,7 +225,9 @@ class BrailleController {
     } catch {
       /* hardware hiccup — the on-screen cell is already showing it, so we still succeed */
     }
-    return `The letter ${ch.toUpperCase()} is now raised on the cell — the learner can feel it. Ask if they feel it, then continue.`;
+    // Neutral context for the agent (works for teaching AND quizzing). The agent decides
+    // whether to confirm it ("can you feel/see it?") or quiz it ("what do you think it is?").
+    return `The cell is now showing the letter ${ch.toUpperCase()}.`;
   }
 
   /**
