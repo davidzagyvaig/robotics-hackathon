@@ -87,7 +87,7 @@ int ON_ANGLE[6]  = {40, 40, 40, 40, 40, 40};
 const int   SERVO_UPDATE_MS = 15;  // how often we nudge the servos (~servo frame)
 const float MIN_STEP_DEG    = 1.0; // degrees/update at speed = 0%   (slowest)
 const float MAX_STEP_DEG    = 90.0;// degrees/update at speed = 100% (snap)
-int speedPct = 60;                 // fixed sweep speed (no pot fitted) — retune here
+int speedPct = 10;                 // fixed sweep speed (no pot fitted) — retune here
 
 // ---- Push button ----
 const bool TOUCH_ACTIVE_HIGH  = true;  // button to 3V3: pressed = HIGH (uses INPUT_PULLDOWN)
