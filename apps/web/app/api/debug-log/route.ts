@@ -24,6 +24,12 @@ export async function POST(req: NextRequest) {
     }
 
     const stamped = { wall: new Date().toISOString(), ...body };
+    // Mirror tool calls to the `npm run dev` TERMINAL. Client console.log only shows in the
+    // browser devtools; this makes the actual tool call visible server-side too.
+    if (typeof body?.type === "string" && body.type.startsWith("toolcall:")) {
+      // eslint-disable-next-line no-console
+      console.log(`🔧 tool → ${body.type.slice(9)}`, JSON.stringify(body.args ?? {}));
+    }
     await appendFile(LOG_FILE, JSON.stringify(stamped) + "\n");
     return NextResponse.json({ ok: true });
   } catch (e) {

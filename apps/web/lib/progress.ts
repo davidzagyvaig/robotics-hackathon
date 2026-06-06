@@ -100,6 +100,22 @@ export const progress = {
     return { isNew: data.isNew, name: data.name, level: data.level, mastered: data.mastered, streak: data.streak };
   },
 
+  /** Forget the current learner so a NEW session starts anonymous (Guest). Identity is then set
+   *  only if the learner actually says a name (→ identify()), and saying a DIFFERENT name switches
+   *  to that learner (reloading their progress). Without this the last name persists via the
+   *  localStorage cache + hydrate() silent-resume, so a new session keeps the old identity even
+   *  when a different name — or no name — is spoken. The voice on/off preference is kept. */
+  reset() {
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.removeItem("braillebuddy.uid");
+      } catch {
+        /* ignore */
+      }
+    }
+    set({ ...DEFAULT, voiceEnabled: current.voiceEnabled });
+  },
+
   setVoice(enabled: boolean) {
     set({ ...current, voiceEnabled: enabled });
     if (current.id) void post("/api/progress", { id: current.id, voiceEnabled: enabled });

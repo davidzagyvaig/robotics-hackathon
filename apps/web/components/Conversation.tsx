@@ -10,9 +10,17 @@ import { debugLog, debugReset } from "@/lib/debug";
 // identify_learner (voice identity → local Postgres), render_braille, render_word. A live
 // transcript doubles as captions so the lesson works muted too.
 
+// Log every tool call the agent makes — its name and the EXACT arguments it sent — to the
+// browser console (and the .debug recorder), so we can see what the model actually invoked.
+function logToolCall(name: string, args: unknown): void {
+  // eslint-disable-next-line no-console
+  console.log(`%c🔧 TOOL CALL → ${name}`, "color:#1C6E8C;font-weight:bold", args);
+  debugLog(`toolcall:${name}`, { args });
+}
+
 const clientTools = {
   identify_learner: async (p: { name: string }) => {
-    debugLog("tool:identify_learner", { name: p.name });
+    logToolCall("identify_learner", p);
     const r = await progress.identify(p.name);
     // Always onboard from the beginning this session; this tool only saves their progress.
     return `Saved. Greet ${r.name} warmly by name, then begin teaching from the very start with the letter A.`;
@@ -22,9 +30,17 @@ const clientTools = {
   // works no matter how the dashboard tool is defined.
   render_braille: async (p: { text?: string; character?: string; word?: string; seconds?: number }) => {
     const text = (p.text ?? p.character ?? p.word ?? "").trim();
-    debugLog("tool:render_braille", { raw: p, resolved: text || "(empty)" });
+    logToolCall("render_braille", p);
     if (!text) return "No text was given to show.";
-    if ([...text].length <= 1) return controller.renderBraille(text, p.seconds ?? 4);
+    if ([...text].length <= 1) {
+      // A lone digit needs its number sign (a 2-cell sequence: number sign, then the digit), so step
+      // it like a short word. Holding the bare cell would look identical to a letter (5 vs e).
+      if (/[0-9]/.test(text)) {
+        void controller.renderWord(text, p.seconds ?? 1.6);
+        return `The cell is now showing the number ${text} (number sign, then the digit).`;
+      }
+      return controller.renderBraille(text, p.seconds ?? 4);
+    }
     // Multi-letter word: step it in the BACKGROUND and return immediately. Awaiting the full
     // animation (~7s for a 4-letter word) blows the tool's 3s response timeout, which made the
     // agent think the cell failed ("cell is having trouble") and retry, stacking animations.
@@ -38,7 +54,7 @@ const clientTools = {
   // In "quiz" the cell hides the letter so it's a real test; "learn" reveals it again.
   set_mode: async (p: { mode?: string }) => {
     const mode = (p.mode ?? "").toLowerCase().includes("quiz") ? "quiz" : "learn";
-    debugLog("tool:set_mode", { raw: p, resolved: mode });
+    logToolCall("set_mode", p);
     controller.setMode(mode);
     return `The screen is now in ${mode} mode.`;
   },
@@ -212,6 +228,7 @@ const Conversation = forwardRef<ConversationHandle>(function Conversation(_props
       endedByUserRef.current = false;
       reconnectRef.current = 0;
       setTranscript([]); // fresh conversation each time YOU start
+      progress.reset(); // start anonymous — the spoken name (if any) sets identity via identify_learner
       debugReset();
       debugLog("session:start-clicked");
     } else {
